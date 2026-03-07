@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.backends.backend_pdf import PdfPages
 import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 # ─── Configuración general ───────────────────────────────────────────────────
 st.set_page_config(
@@ -144,6 +145,9 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05):
                 result["test_name"] = "T-test de Welch"
             elif test_id == 't_paired':
                 min_len = min(len(g1), len(g2))
+                if len(g1) != len(g2):
+                    result["warning"] = (f"Grupos con distinto n ({len(g1)} vs {len(g2)}). "
+                                         f"Se usaron los primeros {min_len} de cada grupo.")
                 stat, p = stats.ttest_rel(g1.values[:min_len], g2.values[:min_len])
                 result["test_name"] = "T-test pareado"
             elif test_id == 'mann_whitney':
@@ -151,6 +155,9 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05):
                 result["test_name"] = "Mann-Whitney U"
             elif test_id == 'wilcoxon':
                 min_len = min(len(g1), len(g2))
+                if len(g1) != len(g2):
+                    result["warning"] = (f"Grupos con distinto n ({len(g1)} vs {len(g2)}). "
+                                         f"Se usaron los primeros {min_len} de cada grupo.")
                 stat, p = stats.wilcoxon(g1.values[:min_len], g2.values[:min_len])
                 result["test_name"] = "Wilcoxon signed-rank"
             
@@ -158,8 +165,9 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05):
             result["p_value"] = float(p)
             result["significant"] = p < alpha
             
-            # Effect size (Cohen's d)
-            pooled_std = np.sqrt((g1.std()**2 + g2.std()**2) / 2)
+            # Effect size (Cohen's d) — pooled std ponderado por n
+            n1, n2 = len(g1), len(g2)
+            pooled_std = np.sqrt(((n1 - 1) * g1.std()**2 + (n2 - 1) * g2.std()**2) / (n1 + n2 - 2))
             if pooled_std > 0:
                 result["cohens_d"] = float(abs(g1.mean() - g2.mean()) / pooled_std)
             
@@ -187,8 +195,8 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05):
                         posthoc = sp.posthoc_tukey(all_data, val_col=var_dep, group_col=var_group)
                         result["posthoc"] = posthoc.to_dict()
                         result["posthoc_name"] = "Tukey HSD"
-                    except:
-                        pass
+                    except Exception as e:
+                        result["posthoc_error"] = f"Tukey HSD fallo: {str(e)}"
             else:
                 stat, p = stats.kruskal(*group_data)
                 result["test_name"] = "Kruskal-Wallis"
@@ -197,12 +205,12 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05):
                     all_data = pd.concat([pd.DataFrame({var_dep: gd, var_group: name}) 
                                          for gd, name in zip(group_data, group_names)])
                     try:
-                        posthoc = sp.posthoc_dunn(all_data, val_col=var_dep, group_col=var_group, 
+                        posthoc = sp.posthoc_dunn(all_data, val_col=var_dep, group_col=var_group,
                                                    p_adjust='bonferroni')
                         result["posthoc"] = posthoc.to_dict()
                         result["posthoc_name"] = "Dunn (Bonferroni)"
-                    except:
-                        pass
+                    except Exception as e:
+                        result["posthoc_error"] = f"Dunn fallo: {str(e)}"
             
             result["statistic"] = float(stat)
             result["p_value"] = float(p)
@@ -736,6 +744,12 @@ if df is not None:
                 else:
                     st.markdown("### 🟢 No significativo")
             
+            # Warnings
+            if result.get('warning'):
+                st.warning(result['warning'])
+            if result.get('posthoc_error'):
+                st.warning(result['posthoc_error'])
+
             # Effect size
             if result.get('cohens_d'):
                 st.info(f"📏 Tamaño del efecto: d de Cohen = {result['cohens_d']:.3f}")
