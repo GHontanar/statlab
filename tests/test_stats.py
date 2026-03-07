@@ -290,3 +290,28 @@ class TestRunTestEdgeCases:
         assert r['test'] == 't_welch'
         assert r['var_dep'] == 'valor'
         assert r['var_group'] == 'grupo'
+
+    def test_paired_with_id_column(self):
+        """Emparejar por columna ID en vez de por posicion."""
+        df = pd.DataFrame({
+            'id': ['s1', 's2', 's3', 's1', 's2', 's3'],
+            'valor': [10, 20, 30, 15, 25, 35],
+            'grupo': ['Pre', 'Pre', 'Pre', 'Post', 'Post', 'Post'],
+        })
+        r = run_test('t_paired', df, 'valor', 'grupo', ['Pre', 'Post'],
+                     paired_id_col='id')
+        assert r['success']
+        assert 'warning' not in r  # 3 vs 3, all matched
+
+    def test_paired_with_id_partial_match(self):
+        """ID parcial genera warning con conteo correcto."""
+        df = pd.DataFrame({
+            'id': ['s1', 's2', 's3', 's1', 's2'],
+            'valor': [10, 20, 30, 15, 25],
+            'grupo': ['Pre', 'Pre', 'Pre', 'Post', 'Post'],
+        })
+        r = run_test('t_paired', df, 'valor', 'grupo', ['Pre', 'Post'],
+                     paired_id_col='id')
+        assert r['success']
+        assert 'warning' in r
+        assert '2 pares' in r['warning']

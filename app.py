@@ -2,6 +2,7 @@
 StatLab - Analisis Estadistico y Generacion de Figuras
 """
 
+import os
 import streamlit as st
 import pandas as pd
 from io import BytesIO
@@ -60,8 +61,21 @@ st.caption("Analisis estadistico y generacion de figuras")
 # --- PASO 1: Carga de datos --------------------------------------------------
 st.header("1. Datos")
 
-uploaded_file = st.file_uploader("Sube tu archivo", type=['csv', 'xlsx', 'xls'],
-                                 help="Formatos aceptados: CSV, XLSX, XLS")
+upload_col, sample_col = st.columns([3, 1])
+with upload_col:
+    uploaded_file = st.file_uploader("Sube tu archivo", type=['csv', 'xlsx', 'xls'],
+                                     help="Formatos aceptados: CSV, XLSX, XLS")
+with sample_col:
+    st.markdown("<br>", unsafe_allow_html=True)
+    _sample_files = {f: f for f in ['sample_data.csv', 'test_completo.csv']
+                     if os.path.exists(f)}
+    if _sample_files:
+        _chosen = st.selectbox("Datos de ejemplo", [""] + list(_sample_files.keys()),
+                               label_visibility="collapsed")
+        if _chosen and st.button("Cargar ejemplo", use_container_width=True):
+            st.session_state.df = pd.read_csv(_chosen)
+            st.success(f"Cargado: {_chosen} — "
+                       f"{st.session_state.df.shape[0]} filas x {st.session_state.df.shape[1]} columnas")
 
 if uploaded_file:
     try:
@@ -166,6 +180,18 @@ if df is not None:
 
         paired = st.checkbox("Datos pareados?", value=False)
 
+        # U3: Selector de columna ID para emparejar sujetos
+        paired_id_col = None
+        if paired and n_groups == 2:
+            id_candidates = [c for c in cols if c != var_dep and c != var_group]
+            if id_candidates:
+                paired_id_col = st.selectbox(
+                    "Columna ID del sujeto (para emparejar)",
+                    ["(orden por posicion)"] + id_candidates
+                )
+                if paired_id_col == "(orden por posicion)":
+                    paired_id_col = None
+
         suggestions = suggest_test('Continua', 'Categorica', n_groups, paired, all_normal)
 
         if suggestions:
@@ -243,7 +269,10 @@ if df is not None:
     # --- Ejecutar test --------------------------------------------------------
     if st.button("Ejecutar analisis", type="primary", use_container_width=True):
         with st.spinner("Calculando..."):
-            result = run_test(selected_test_id, df, var_dep, var_group, selected_groups, alpha)
+            _id_col = paired_id_col if (analysis_type == "Comparacion de grupos"
+                                        and paired and 'paired_id_col' in dir()) else None
+            result = run_test(selected_test_id, df, var_dep, var_group,
+                              selected_groups, alpha, paired_id_col=_id_col)
             st.session_state.results.append(result)
 
         if result.get('success'):
@@ -275,6 +304,12 @@ if df is not None:
 
             with st.expander("Detalle completo", expanded=True):
                 st.text(format_result_text(result))
+
+            # U2: Tabla de contingencia visual
+            if result.get('contingency_table'):
+                with st.expander("Tabla de contingencia", expanded=True):
+                    ct_df = pd.DataFrame(result['contingency_table'])
+                    st.dataframe(ct_df, use_container_width=True)
 
             if result.get('posthoc'):
                 with st.expander(f"Post-hoc: {result['posthoc_name']}", expanded=True):
@@ -371,20 +406,23 @@ if df is not None:
 
         with col_dl2:
             if st.button("Generar informe PDF", use_container_width=True):
-                with st.spinner("Generando PDF..."):
-                    pdf_buf = generate_pdf_report(valid_results, st.session_state.figures)
-                    st.download_button(
-                        "Descargar PDF",
-                        data=pdf_buf,
-                        file_name="statlab_informe.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
+                progress = st.progress(0, text="Preparando informe...")
+                progress.progress(10, text="Generando resultados...")
+                pdf_buf = generate_pdf_report(valid_results, st.session_state.figures)
+                progress.progress(90, text="Finalizando...")
+                st.download_button(
+                    "Descargar PDF",
+                    data=pdf_buf,
+                    file_name="statlab_informe.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                progress.progress(100, text="Listo")
     else:
         st.info("Ejecuta al menos un analisis para poder generar el informe.")
 
     # --- Historial ------------------------------------------------------------
-    if len(st.session_state.results) > 1:
+    if st.session_state.results:
         with st.expander(f"Historial de analisis ({len(valid_results)} realizados)"):
             for i, r in enumerate(valid_results):
                 p_val = r.get('p_value')
@@ -394,6 +432,11 @@ if df is not None:
                                 f"p = {p_val:.4f}")
                 else:
                     st.markdown(f"**{i+1}.** Error")
+            # U1: Boton para limpiar historial
+            if st.button("Limpiar historial", type="secondary"):
+                st.session_state.results = []
+                st.session_state.figures = []
+                st.rerun()
 
 else:
     st.markdown("---")

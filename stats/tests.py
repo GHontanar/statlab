@@ -56,7 +56,7 @@ def suggest_test(var_dep_type, var_group_type, n_groups, paired=False, normal=Tr
     return suggestions
 
 
-def _run_two_groups(test_id, df, var_dep, var_group, groups, alpha):
+def _run_two_groups(test_id, df, var_dep, var_group, groups, alpha, paired_id_col=None):
     """Ejecuta tests de 2 grupos (t-test, Welch, Mann-Whitney, Wilcoxon)."""
     result = {}
 
@@ -81,23 +81,33 @@ def _run_two_groups(test_id, df, var_dep, var_group, groups, alpha):
     elif test_id == 't_welch':
         stat, p = stats.ttest_ind(g1, g2, equal_var=False)
         result["test_name"] = "T-test de Welch"
-    elif test_id == 't_paired':
-        min_len = min(len(g1), len(g2))
-        if len(g1) != len(g2):
-            result["warning"] = (f"Grupos con distinto n ({len(g1)} vs {len(g2)}). "
-                                 f"Se usaron los primeros {min_len} de cada grupo.")
-        stat, p = stats.ttest_rel(g1.values[:min_len], g2.values[:min_len])
-        result["test_name"] = "T-test pareado"
+    elif test_id in ('t_paired', 'wilcoxon'):
+        # U3: Emparejar por columna ID si se proporciona
+        if paired_id_col and paired_id_col in df.columns:
+            df1 = df[df[var_group] == groups[0]][[paired_id_col, var_dep]].dropna()
+            df2 = df[df[var_group] == groups[1]][[paired_id_col, var_dep]].dropna()
+            merged = df1.merge(df2, on=paired_id_col, suffixes=('_1', '_2'))
+            paired_g1 = merged[f'{var_dep}_1'].values
+            paired_g2 = merged[f'{var_dep}_2'].values
+            if len(merged) < len(df1) or len(merged) < len(df2):
+                result["warning"] = (f"Emparejados por '{paired_id_col}': "
+                                     f"{len(merged)} pares de {len(df1)}/{len(df2)} sujetos.")
+        else:
+            min_len = min(len(g1), len(g2))
+            if len(g1) != len(g2):
+                result["warning"] = (f"Grupos con distinto n ({len(g1)} vs {len(g2)}). "
+                                     f"Se usaron los primeros {min_len} de cada grupo.")
+            paired_g1 = g1.values[:min_len]
+            paired_g2 = g2.values[:min_len]
+        if test_id == 't_paired':
+            stat, p = stats.ttest_rel(paired_g1, paired_g2)
+            result["test_name"] = "T-test pareado"
+        else:
+            stat, p = stats.wilcoxon(paired_g1, paired_g2)
+            result["test_name"] = "Wilcoxon signed-rank"
     elif test_id == 'mann_whitney':
         stat, p = stats.mannwhitneyu(g1, g2, alternative='two-sided')
         result["test_name"] = "Mann-Whitney U"
-    elif test_id == 'wilcoxon':
-        min_len = min(len(g1), len(g2))
-        if len(g1) != len(g2):
-            result["warning"] = (f"Grupos con distinto n ({len(g1)} vs {len(g2)}). "
-                                 f"Se usaron los primeros {min_len} de cada grupo.")
-        stat, p = stats.wilcoxon(g1.values[:min_len], g2.values[:min_len])
-        result["test_name"] = "Wilcoxon signed-rank"
 
     result["statistic"] = float(stat)
     result["p_value"] = float(p)
@@ -231,13 +241,14 @@ def _run_categorical(test_id, df, var_dep, var_group, alpha):
     return result
 
 
-def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05):
+def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05, paired_id_col=None):
     """Ejecuta el test estadistico seleccionado."""
     result = {"test": test_id, "var_dep": var_dep, "var_group": var_group, "alpha": alpha}
 
     try:
         if test_id in ('t_independent', 't_welch', 'mann_whitney', 'wilcoxon', 't_paired'):
-            result.update(_run_two_groups(test_id, df, var_dep, var_group, groups, alpha))
+            result.update(_run_two_groups(test_id, df, var_dep, var_group, groups, alpha,
+                                          paired_id_col=paired_id_col))
         elif test_id in ('anova', 'kruskal'):
             result.update(_run_multi_groups(test_id, df, var_dep, var_group, groups, alpha))
         elif test_id in ('pearson', 'spearman'):
