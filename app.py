@@ -322,15 +322,30 @@ if df is not None:
             st.session_state.figures.append(fig)
             st.pyplot(fig)
 
-            buf = BytesIO()
-            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-            buf.seek(0)
-            st.download_button(
-                f"Descargar {fig_name} (PNG, 300dpi)",
-                data=buf,
-                file_name=f"statlab_{fig_type}.png",
-                mime="image/png"
-            )
+            # G1: Descarga en PNG y SVG
+            dl_cols = st.columns(2)
+            buf_png = BytesIO()
+            fig.savefig(buf_png, format='png', dpi=300, bbox_inches='tight')
+            buf_png.seek(0)
+            with dl_cols[0]:
+                st.download_button(
+                    f"PNG 300dpi — {fig_name}",
+                    data=buf_png,
+                    file_name=f"statlab_{fig_type}.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            buf_svg = BytesIO()
+            fig.savefig(buf_svg, format='svg', bbox_inches='tight')
+            buf_svg.seek(0)
+            with dl_cols[1]:
+                st.download_button(
+                    f"SVG — {fig_name}",
+                    data=buf_svg,
+                    file_name=f"statlab_{fig_type}.svg",
+                    mime="image/svg+xml",
+                    use_container_width=True,
+                )
 
     # --- PASO 5: Informe ------------------------------------------------------
     st.header("5. Descargar informe")
