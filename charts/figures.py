@@ -51,9 +51,17 @@ def _apply_style():
     })
 
 
-def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None):
+def _get_palette(options=None):
+    """Retorna la paleta a usar segun opciones del usuario."""
+    if options and options.get('palette'):
+        return options['palette']
+    return PALETTE
+
+
+def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None, options=None):
     """Genera una figura segun el tipo seleccionado."""
     _apply_style()
+    palette = _get_palette(options)
 
     n_groups = len(groups) if groups else None
     figsize = _figsize_for(fig_type, n_groups)
@@ -66,17 +74,26 @@ def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None):
 
     try:
         if fig_type == 'boxplot':
-            _plot_boxplot(ax, plot_df, var_dep, var_group)
+            _plot_boxplot(ax, plot_df, var_dep, var_group, palette)
         elif fig_type == 'violin':
-            _plot_violin(ax, plot_df, var_dep, var_group)
+            _plot_violin(ax, plot_df, var_dep, var_group, palette)
         elif fig_type == 'bar_error':
-            _plot_bar_error(ax, plot_df, var_dep, var_group, groups)
+            _plot_bar_error(ax, plot_df, var_dep, var_group, groups, palette)
         elif fig_type == 'scatter':
-            _plot_scatter(ax, plot_df, var_dep, var_group)
+            _plot_scatter(ax, plot_df, var_dep, var_group, palette)
         elif fig_type == 'paired':
-            _plot_paired(ax, plot_df, var_dep, var_group, groups)
+            _plot_paired(ax, plot_df, var_dep, var_group, groups, palette)
         elif fig_type == 'histogram':
-            _plot_histogram(ax, plot_df, var_dep, var_group, groups)
+            _plot_histogram(ax, plot_df, var_dep, var_group, groups, palette)
+
+        # G8: Aplicar personalizaciones del usuario
+        if options:
+            if options.get('title'):
+                ax.set_title(options['title'], fontweight='bold', pad=15)
+            if options.get('xlabel'):
+                ax.set_xlabel(options['xlabel'])
+            if options.get('ylabel'):
+                ax.set_ylabel(options['ylabel'])
 
         # G4: Brackets de significancia para comparacion de 2 grupos
         if result and result.get('p_value') is not None:
@@ -96,34 +113,40 @@ def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None):
     return fig
 
 
-def _plot_boxplot(ax, df, var_dep, var_group):
+def _plot_boxplot(ax, df, var_dep, var_group, palette=PALETTE):
     n = df[var_group].nunique()
+    pal = palette[:n] if isinstance(palette, list) else palette
     sns.boxplot(data=df, x=var_group, y=var_dep, hue=var_group,
-                palette=PALETTE[:n], width=0.6, ax=ax, showfliers=False, legend=False)
+                palette=pal, width=0.6, ax=ax, showfliers=False, legend=False)
     # G5: Puntos mas visibles
     sns.stripplot(data=df, x=var_group, y=var_dep, color='#2d3748',
                   alpha=0.6, size=5, jitter=True, ax=ax)
     ax.set_title(f'{var_dep} por {var_group}')
 
 
-def _plot_violin(ax, df, var_dep, var_group):
+def _plot_violin(ax, df, var_dep, var_group, palette=PALETTE):
     n = df[var_group].nunique()
+    pal = palette[:n] if isinstance(palette, list) else palette
     sns.violinplot(data=df, x=var_group, y=var_dep, hue=var_group,
-                   palette=PALETTE[:n], inner='box', ax=ax, legend=False)
+                   palette=pal, inner='box', ax=ax, legend=False)
     sns.stripplot(data=df, x=var_group, y=var_dep, color='#2d3748',
                   alpha=0.5, size=4, jitter=True, ax=ax)
     ax.set_title(f'{var_dep} por {var_group}')
 
 
-def _plot_bar_error(ax, df, var_dep, var_group, groups):
+def _plot_bar_error(ax, df, var_dep, var_group, groups, palette=PALETTE):
     grouped = df.groupby(var_group)[var_dep]
     means = grouped.mean()
     sems = grouped.sem()
     order = groups if groups else means.index
     x_pos = list(range(len(order)))
+    if isinstance(palette, list):
+        colors = palette[:len(order)]
+    else:
+        colors = sns.color_palette(palette, len(order))
     ax.bar(x_pos, [means[g] for g in order],
            yerr=[sems[g] for g in order],
-           capsize=5, color=PALETTE[:len(order)],
+           capsize=5, color=colors,
            edgecolor='black', linewidth=0.5, alpha=0.85, width=0.6)
     # G5: Puntos individuales sobre barras
     for i, g in enumerate(order):
@@ -137,10 +160,10 @@ def _plot_bar_error(ax, df, var_dep, var_group, groups):
     ax.set_title(f'{var_dep} por {var_group} (media +/- SEM)')
 
 
-def _plot_scatter(ax, df, var_dep, var_group):
-    # G6: Bordes oscuros para contraste
+def _plot_scatter(ax, df, var_dep, var_group, palette=PALETTE):
+    color = palette[0] if isinstance(palette, list) else sns.color_palette(palette, 1)[0]
     ax.scatter(df[var_group], df[var_dep], alpha=0.65,
-               color=PALETTE[0], edgecolors='#2d3748', linewidths=0.5, s=60)
+               color=color, edgecolors='#2d3748', linewidths=0.5, s=60)
     clean = df[[var_dep, var_group]].dropna()
     if len(clean) > 2:
         z = np.polyfit(clean[var_group], clean[var_dep], 1)
@@ -156,15 +179,19 @@ def _plot_scatter(ax, df, var_dep, var_group):
     ax.set_title(f'{var_dep} vs {var_group}')
 
 
-def _plot_paired(ax, df, var_dep, var_group, groups):
+def _plot_paired(ax, df, var_dep, var_group, groups, palette=PALETTE):
     unique_groups = groups if groups else sorted(df[var_group].dropna().unique())[:2]
     if len(unique_groups) >= 2:
         g1_data = df[df[var_group] == unique_groups[0]][var_dep].dropna().values
         g2_data = df[df[var_group] == unique_groups[1]][var_dep].dropna().values
         min_n = min(len(g1_data), len(g2_data))
-        # G6: Lineas mas visibles
+        if isinstance(palette, list):
+            c_up, c_down = palette[1], palette[0]
+        else:
+            pal = sns.color_palette(palette, 2)
+            c_up, c_down = pal[1], pal[0]
         for i in range(min_n):
-            color = PALETTE[1] if g2_data[i] > g1_data[i] else PALETTE[0]
+            color = c_up if g2_data[i] > g1_data[i] else c_down
             ax.plot([0, 1], [g1_data[i], g2_data[i]], '-o', color=color,
                     alpha=0.55, markersize=7, linewidth=1.2)
         # G6: Marcadores de media por grupo
@@ -179,17 +206,23 @@ def _plot_paired(ax, df, var_dep, var_group, groups):
         ax.set_title(f'{var_dep}: {unique_groups[0]} -> {unique_groups[1]}')
 
 
-def _plot_histogram(ax, df, var_dep, var_group, groups):
+def _plot_histogram(ax, df, var_dep, var_group, groups, palette=PALETTE):
     if var_group and df[var_group].dtype == 'object':
         unique_groups = groups if groups else sorted(df[var_group].dropna().unique())
+        if isinstance(palette, list):
+            colors = palette
+        else:
+            colors = sns.color_palette(palette, len(unique_groups))
         for i, g in enumerate(unique_groups):
             gd = df[df[var_group] == g][var_dep].dropna()
-            ax.hist(gd, bins='auto', alpha=0.6, color=PALETTE[i % len(PALETTE)],
+            ax.hist(gd, bins='auto', alpha=0.6,
+                    color=colors[i % len(colors)],
                     label=str(g), edgecolor='white')
         ax.legend(framealpha=0.8)
     else:
+        color = palette[0] if isinstance(palette, list) else sns.color_palette(palette, 1)[0]
         ax.hist(df[var_dep].dropna(), bins='auto', alpha=0.7,
-                color=PALETTE[0], edgecolor='white')
+                color=color, edgecolor='white')
     ax.set_xlabel(var_dep)
     ax.set_ylabel('Frecuencia')
     ax.set_title(f'Distribucion de {var_dep}')

@@ -149,6 +149,30 @@ clinicamente relevante.*
 """)
 
     st.markdown("---")
+    st.header("Personalizar figuras")
+
+    custom_title = st.text_input("Titulo", value="", placeholder="Auto")
+    custom_xlabel = st.text_input("Eje X", value="", placeholder="Auto")
+    custom_ylabel = st.text_input("Eje Y", value="", placeholder="Auto")
+
+    _palettes = {
+        "StatLab (defecto)": None,
+        "Azules": "Blues",
+        "Rojos": "Reds",
+        "Verdes": "Greens",
+        "Pastel": "pastel",
+        "Set2": "Set2",
+        "Escala de grises": "Greys",
+    }
+    _pal_choice = st.selectbox("Paleta de colores", list(_palettes.keys()))
+    custom_palette = _palettes[_pal_choice]
+
+    fig_options = {
+        'title': custom_title or None,
+        'xlabel': custom_xlabel or None,
+        'ylabel': custom_ylabel or None,
+        'palette': custom_palette,
+    }
 
 # === INTERFAZ PRINCIPAL =======================================================
 
@@ -468,7 +492,8 @@ if df is not None:
             fig = generate_figure(
                 fig_type, df, var_dep, var_group,
                 selected_groups if analysis_type == "Comparacion de grupos" else None,
-                last_result
+                last_result,
+                options=fig_options,
             )
             st.session_state.figures.append(fig)
             st.pyplot(fig)
