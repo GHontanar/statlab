@@ -53,6 +53,103 @@ if 'results' not in st.session_state:
 if 'figures' not in st.session_state:
     st.session_state.figures = []
 
+# === GUIA DE TESTS (sidebar) ==================================================
+
+with st.sidebar:
+    st.header("Guia de tests")
+    st.caption("Referencia rapida para elegir el test adecuado")
+
+    with st.expander("Comparar 2 grupos"):
+        st.markdown("""
+**Datos independientes** (sujetos distintos en cada grupo)
+
+| Condicion | Test |
+|-----------|------|
+| Datos normales, varianzas iguales | T-test independiente |
+| Datos normales, varianzas distintas | T-test de Welch |
+| Datos no normales u ordinales | Mann-Whitney U |
+
+*Ejemplo: Comparar hemoglobina entre grupo tratamiento y control.*
+
+**Datos pareados** (mismo sujeto medido 2 veces)
+
+| Condicion | Test |
+|-----------|------|
+| Datos normales | T-test pareado |
+| Datos no normales | Wilcoxon signed-rank |
+
+*Ejemplo: Presion arterial antes y despues de un farmaco.*
+""")
+
+    with st.expander("Comparar 3+ grupos"):
+        st.markdown("""
+| Condicion | Test | Post-hoc |
+|-----------|------|----------|
+| Datos normales | ANOVA one-way | Tukey HSD |
+| Datos no normales | Kruskal-Wallis | Dunn (Bonferroni) |
+
+*Ejemplo: Comparar eficacia de 3 farmacos distintos.*
+
+El post-hoc solo se ejecuta si el test principal es significativo
+(p < alpha). Indica **que pares** de grupos difieren entre si.
+""")
+
+    with st.expander("Correlacion y regresion"):
+        st.markdown("""
+| Condicion | Test |
+|-----------|------|
+| Relacion lineal, datos normales | Pearson |
+| Relacion monotona, datos no normales | Spearman |
+| Predecir Y a partir de X | Regresion lineal |
+
+- **r** cercano a +1/-1 = correlacion fuerte
+- **R2** = proporcion de varianza explicada
+- **p-valor** = probabilidad de obtener esa r por azar
+
+*Ejemplo: Correlacion entre IMC y colesterol.*
+""")
+
+    with st.expander("Variables categoricas"):
+        st.markdown("""
+| Condicion | Test |
+|-----------|------|
+| Tabla >2x2, o n grande | Chi-cuadrado |
+| Tabla 2x2 con n pequeno (<20) | Fisher exacto |
+
+Comparan si la distribucion de una variable categorica
+es independiente de otra.
+
+*Ejemplo: Asociacion entre tratamiento (A/B) y desenlace
+(mejora/no mejora).*
+""")
+
+    with st.expander("Normalidad"):
+        st.markdown("""
+StatLab usa el **test de Shapiro-Wilk** automaticamente.
+
+- **p > 0.05**: No se rechaza normalidad -> test parametrico
+- **p < 0.05**: Se rechaza normalidad -> test no parametrico
+
+Funciona bien con n entre 3 y 5000.
+Con n muy grande, casi todo resulta "no normal" por exceso de poder.
+""")
+
+    with st.expander("Tamano del efecto"):
+        st.markdown("""
+El p-valor indica si hay diferencia, pero no su magnitud.
+
+| Metrica | Pequeno | Mediano | Grande |
+|---------|---------|---------|--------|
+| d de Cohen | <0.5 | 0.5-0.8 | >0.8 |
+| eta2 (ANOVA) | <0.06 | 0.06-0.14 | >0.14 |
+| R2 | <0.09 | 0.09-0.25 | >0.25 |
+
+*Un p-valor muy bajo con efecto pequeno puede no ser
+clinicamente relevante.*
+""")
+
+    st.markdown("---")
+
 # === INTERFAZ PRINCIPAL =======================================================
 
 st.title("📊 StatLab")
