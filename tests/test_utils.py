@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 import pytest
-from utils.data import infer_variable_type
+from utils.data import infer_variable_type, validate_continuous, validate_group_sizes
 
 
 class TestInferVariableType:
@@ -42,3 +42,77 @@ class TestInferVariableType:
         Esto es un caso edge conocido — el usuario puede corregirlo en la UI."""
         s = pd.Series([True, False, True, False])
         assert infer_variable_type(s) == 'Continua'
+
+
+class TestValidateContinuous:
+    def test_numeric_column_ok(self):
+        df = pd.DataFrame({'x': [1.0, 2.0, 3.0]})
+        ok, err = validate_continuous(df, 'x')
+        assert ok
+        assert err == ""
+
+    def test_string_column_fails(self):
+        df = pd.DataFrame({'x': ['a', 'b', 'c']})
+        ok, err = validate_continuous(df, 'x')
+        assert not ok
+        assert 'no es numerica' in err
+
+    def test_missing_column_fails(self):
+        df = pd.DataFrame({'x': [1, 2, 3]})
+        ok, err = validate_continuous(df, 'inexistente')
+        assert not ok
+        assert 'no existe' in err
+
+    def test_all_nan_fails(self):
+        df = pd.DataFrame({'x': [np.nan, np.nan, np.nan]})
+        ok, err = validate_continuous(df, 'x')
+        assert not ok
+        assert 'NaN' in err
+
+    def test_int_column_ok(self):
+        df = pd.DataFrame({'x': [1, 2, 3, 4, 5]})
+        ok, err = validate_continuous(df, 'x')
+        assert ok
+
+    def test_partial_nan_ok(self):
+        df = pd.DataFrame({'x': [1.0, np.nan, 3.0]})
+        ok, err = validate_continuous(df, 'x')
+        assert ok
+
+
+class TestValidateGroupSizes:
+    def test_sufficient_groups(self):
+        df = pd.DataFrame({
+            'valor': [1, 2, 3, 4, 5, 6],
+            'grupo': ['A', 'A', 'A', 'B', 'B', 'B'],
+        })
+        ok, err, counts = validate_group_sizes(df, 'valor', 'grupo', ['A', 'B'])
+        assert ok
+        assert counts == {'A': 3, 'B': 3}
+
+    def test_group_too_small(self):
+        df = pd.DataFrame({
+            'valor': [1, 2, 3, 4],
+            'grupo': ['A', 'A', 'A', 'B'],
+        })
+        ok, err, counts = validate_group_sizes(df, 'valor', 'grupo', ['A', 'B'], min_n=2)
+        assert not ok
+        assert "n=1" in err
+
+    def test_empty_group(self):
+        df = pd.DataFrame({
+            'valor': [1, 2, 3, np.nan],
+            'grupo': ['A', 'A', 'A', 'B'],
+        })
+        ok, err, counts = validate_group_sizes(df, 'valor', 'grupo', ['A', 'B'])
+        assert not ok
+        assert counts['B'] == 0
+
+    def test_custom_min_n(self):
+        df = pd.DataFrame({
+            'valor': [1, 2, 3, 4, 5, 6],
+            'grupo': ['A', 'A', 'A', 'B', 'B', 'B'],
+        })
+        ok, err, counts = validate_group_sizes(df, 'valor', 'grupo', ['A', 'B'], min_n=5)
+        assert not ok
+        assert "minimo requerido: 5" in err

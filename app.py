@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
-from utils.data import infer_variable_type
+from utils.data import infer_variable_type, validate_continuous, validate_group_sizes
 from stats.tests import check_normality, suggest_test, run_test
 from charts.figures import generate_figure
 from reports.text import format_result_text
@@ -245,6 +245,12 @@ if df is not None:
                 st.stop()
             var_group = st.selectbox("Variable de agrupacion (categorica)", categorical_vars)
 
+        # A3: Validar que la variable continua sea numerica
+        ok, err = validate_continuous(df, var_dep)
+        if not ok:
+            st.error(err)
+            st.stop()
+
         all_groups = sorted(df[var_group].dropna().unique())
         selected_groups = st.multiselect(
             f"Grupos a comparar (de `{var_group}`)",
@@ -254,6 +260,12 @@ if df is not None:
 
         if len(selected_groups) < 2:
             st.warning("Selecciona al menos 2 grupos para comparar.")
+            st.stop()
+
+        # A3: Validar n minimo por grupo
+        ok, err, counts = validate_group_sizes(df, var_dep, var_group, selected_groups)
+        if not ok:
+            st.error(err)
             st.stop()
 
         n_groups = len(selected_groups)
@@ -332,6 +344,13 @@ if df is not None:
         with col_right:
             remaining = [c for c in continuous_vars if c != var_dep]
             var_group = st.selectbox("Variable X", remaining)
+
+        # A3: Validar que ambas variables sean numericas
+        for _v in [var_dep, var_group]:
+            ok, err = validate_continuous(df, _v)
+            if not ok:
+                st.error(err)
+                st.stop()
 
         selected_groups = None
         all_tests = {
