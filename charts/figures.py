@@ -26,6 +26,9 @@ _FIGSIZE = {
     'scatter': (7, 7),
     'paired': (6, 7),
     'histogram': (8, 5.5),
+    'bland_altman': (8, 6),
+    'roc': (7, 7),
+    'kaplan_meier': (8, 6),
 }
 
 
@@ -37,8 +40,13 @@ def _figsize_for(fig_type, n_groups=None):
     return (w, h)
 
 
+_style_applied = False
+
 def _apply_style():
     """G2/G7: Configura estilo global para figuras de calidad publicacion."""
+    global _style_applied
+    if _style_applied:
+        return
     sns.set_style("whitegrid")
     sns.set_context("notebook", font_scale=1.1)
     plt.rcParams.update({
@@ -49,6 +57,7 @@ def _apply_style():
         'figure.dpi': 150,
         'savefig.dpi': 300,
     })
+    _style_applied = True
 
 
 def _get_palette(options=None):
@@ -56,6 +65,20 @@ def _get_palette(options=None):
     if options and options.get('palette'):
         return options['palette']
     return PALETTE
+
+
+def _resolve_colors(palette, n):
+    """Resuelve paleta a lista de n colores."""
+    if isinstance(palette, list):
+        return palette[:n]
+    return sns.color_palette(palette, n)
+
+
+def _resolve_color(palette, index=0):
+    """Resuelve paleta a un solo color."""
+    if isinstance(palette, list):
+        return palette[index]
+    return sns.color_palette(palette, index + 1)[index]
 
 
 def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None, options=None):
@@ -70,7 +93,7 @@ def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None, 
     if groups:
         plot_df = df[df[var_group].isin(groups)].copy()
     else:
-        plot_df = df.copy()
+        plot_df = df
 
     try:
         if fig_type == 'boxplot':
@@ -85,6 +108,12 @@ def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None, 
             _plot_paired(ax, plot_df, var_dep, var_group, groups, palette)
         elif fig_type == 'histogram':
             _plot_histogram(ax, plot_df, var_dep, var_group, groups, palette)
+        elif fig_type == 'bland_altman':
+            _plot_bland_altman(ax, plot_df, var_dep, var_group, result, palette)
+        elif fig_type == 'roc':
+            _plot_roc(ax, result, palette)
+        elif fig_type == 'kaplan_meier':
+            _plot_kaplan_meier(ax, result, palette)
 
         # G8: Aplicar personalizaciones del usuario
         if options:
@@ -96,7 +125,7 @@ def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None, 
                 ax.set_ylabel(options['ylabel'])
 
         # G4: Brackets de significancia para comparacion de 2 grupos
-        if result and result.get('p_value') is not None:
+        if result and isinstance(result.get('p_value'), (int, float)):
             if fig_type in ('boxplot', 'violin', 'bar_error') and n_groups == 2:
                 _add_bracket(ax, result)
             else:
@@ -115,7 +144,7 @@ def generate_figure(fig_type, df, var_dep, var_group, groups=None, result=None, 
 
 def _plot_boxplot(ax, df, var_dep, var_group, palette=PALETTE):
     n = df[var_group].nunique()
-    pal = palette[:n] if isinstance(palette, list) else palette
+    pal = _resolve_colors(palette, n)
     sns.boxplot(data=df, x=var_group, y=var_dep, hue=var_group,
                 palette=pal, width=0.6, ax=ax, showfliers=False, legend=False)
     # G5: Puntos mas visibles
@@ -126,7 +155,7 @@ def _plot_boxplot(ax, df, var_dep, var_group, palette=PALETTE):
 
 def _plot_violin(ax, df, var_dep, var_group, palette=PALETTE):
     n = df[var_group].nunique()
-    pal = palette[:n] if isinstance(palette, list) else palette
+    pal = _resolve_colors(palette, n)
     sns.violinplot(data=df, x=var_group, y=var_dep, hue=var_group,
                    palette=pal, inner='box', ax=ax, legend=False)
     sns.stripplot(data=df, x=var_group, y=var_dep, color='#2d3748',
@@ -140,10 +169,7 @@ def _plot_bar_error(ax, df, var_dep, var_group, groups, palette=PALETTE):
     sems = grouped.sem()
     order = groups if groups else means.index
     x_pos = list(range(len(order)))
-    if isinstance(palette, list):
-        colors = palette[:len(order)]
-    else:
-        colors = sns.color_palette(palette, len(order))
+    colors = _resolve_colors(palette, len(order))
     ax.bar(x_pos, [means[g] for g in order],
            yerr=[sems[g] for g in order],
            capsize=5, color=colors,
@@ -161,7 +187,7 @@ def _plot_bar_error(ax, df, var_dep, var_group, groups, palette=PALETTE):
 
 
 def _plot_scatter(ax, df, var_dep, var_group, palette=PALETTE):
-    color = palette[0] if isinstance(palette, list) else sns.color_palette(palette, 1)[0]
+    color = _resolve_color(palette)
     ax.scatter(df[var_group], df[var_dep], alpha=0.65,
                color=color, edgecolors='#2d3748', linewidths=0.5, s=60)
     clean = df[[var_dep, var_group]].dropna()
@@ -185,11 +211,8 @@ def _plot_paired(ax, df, var_dep, var_group, groups, palette=PALETTE):
         g1_data = df[df[var_group] == unique_groups[0]][var_dep].dropna().values
         g2_data = df[df[var_group] == unique_groups[1]][var_dep].dropna().values
         min_n = min(len(g1_data), len(g2_data))
-        if isinstance(palette, list):
-            c_up, c_down = palette[1], palette[0]
-        else:
-            pal = sns.color_palette(palette, 2)
-            c_up, c_down = pal[1], pal[0]
+        pal = _resolve_colors(palette, 2)
+        c_up, c_down = pal[1], pal[0]
         for i in range(min_n):
             color = c_up if g2_data[i] > g1_data[i] else c_down
             ax.plot([0, 1], [g1_data[i], g2_data[i]], '-o', color=color,
@@ -209,10 +232,7 @@ def _plot_paired(ax, df, var_dep, var_group, groups, palette=PALETTE):
 def _plot_histogram(ax, df, var_dep, var_group, groups, palette=PALETTE):
     if var_group and df[var_group].dtype == 'object':
         unique_groups = groups if groups else sorted(df[var_group].dropna().unique())
-        if isinstance(palette, list):
-            colors = palette
-        else:
-            colors = sns.color_palette(palette, len(unique_groups))
+        colors = _resolve_colors(palette, len(unique_groups))
         for i, g in enumerate(unique_groups):
             gd = df[df[var_group] == g][var_dep].dropna()
             ax.hist(gd, bins='auto', alpha=0.6,
@@ -220,12 +240,101 @@ def _plot_histogram(ax, df, var_dep, var_group, groups, palette=PALETTE):
                     label=str(g), edgecolor='white')
         ax.legend(framealpha=0.8)
     else:
-        color = palette[0] if isinstance(palette, list) else sns.color_palette(palette, 1)[0]
+        color = _resolve_color(palette)
         ax.hist(df[var_dep].dropna(), bins='auto', alpha=0.7,
                 color=color, edgecolor='white')
     ax.set_xlabel(var_dep)
     ax.set_ylabel('Frecuencia')
     ax.set_title(f'Distribucion de {var_dep}')
+
+
+def _plot_bland_altman(ax, df, var_dep, var_group, result, palette=PALETTE):
+    """Grafico de Bland-Altman: diferencia vs media de dos metodos."""
+    clean = df[[var_dep, var_group]].dropna()
+    m1, m2 = clean[var_dep].values, clean[var_group].values
+    mean_vals = (m1 + m2) / 2
+    diff_vals = m1 - m2
+
+    ax.scatter(mean_vals, diff_vals, alpha=0.65, color=_resolve_color(palette),
+               edgecolors='#2d3748', linewidths=0.5, s=60)
+
+    bias = result['bias'] if result and 'bias' in result else np.mean(diff_vals)
+    sd = result['sd_diff'] if result and 'sd_diff' in result else np.std(diff_vals, ddof=1)
+    ax.axhline(bias, color=_resolve_color(palette, 1),
+               linestyle='-', linewidth=1.5, label=f'Sesgo: {bias:.3f}')
+    ax.axhline(bias + 1.96 * sd, color='#718096', linestyle='--', linewidth=1,
+               label=f'+1.96 DE: {bias + 1.96 * sd:.3f}')
+    ax.axhline(bias - 1.96 * sd, color='#718096', linestyle='--', linewidth=1,
+               label=f'-1.96 DE: {bias - 1.96 * sd:.3f}')
+    ax.axhline(0, color='black', linestyle=':', linewidth=0.5, alpha=0.5)
+    ax.legend(loc='upper right', framealpha=0.8, fontsize=9)
+    ax.set_xlabel(f'Media de {var_dep} y {var_group}')
+    ax.set_ylabel(f'Diferencia ({var_dep} - {var_group})')
+    ax.set_title('Bland-Altman: concordancia entre metodos')
+
+
+def _plot_roc(ax, result, palette=PALETTE):
+    """Curva ROC con AUC y punto de corte optimo."""
+    if not result or 'fpr' not in result:
+        ax.text(0.5, 0.5, 'Ejecuta el analisis ROC primero',
+                ha='center', va='center', transform=ax.transAxes)
+        return
+
+    fpr = result['fpr']
+    tpr = result['tpr']
+    auc = result.get('auc', 0)
+
+    ax.plot(fpr, tpr, color=_resolve_color(palette), linewidth=2, label=f'AUC = {auc:.3f}')
+    ax.plot([0, 1], [0, 1], '--', color='#a0aec0', linewidth=1)
+
+    # Punto de corte optimo
+    if result.get('sensitivity') is not None:
+        sens = result['sensitivity']
+        spec = result['specificity']
+        ax.plot(1 - spec, sens, 'o', color=_resolve_color(palette, 1),
+                markersize=8, zorder=5,
+                label=f'Corte = {result["best_threshold"]:.2f}\n'
+                      f'Sens = {sens:.2f}, Esp = {spec:.2f}')
+
+    ax.legend(loc='lower right', framealpha=0.8, fontsize=9)
+    ax.set_xlabel('1 - Especificidad (FPR)')
+    ax.set_ylabel('Sensibilidad (TPR)')
+    ax.set_title('Curva ROC')
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.02)
+
+
+def _plot_kaplan_meier(ax, result, palette=PALETTE):
+    """Curvas de supervivencia Kaplan-Meier."""
+    if not result or 'curves' not in result:
+        ax.text(0.5, 0.5, 'Ejecuta el analisis Kaplan-Meier primero',
+                ha='center', va='center', transform=ax.transAxes)
+        return
+
+    curves = result['curves']
+    colors = _resolve_colors(palette, len(curves))
+
+    for i, (label, data) in enumerate(curves.items()):
+        c = colors[i % len(colors)]
+        timeline = data['timeline']
+        survival = data['survival']
+        median = data.get('median')
+        lbl = f'{label} (n={data["n"]})'
+        if median is not None:
+            lbl += f', med={median:.1f}'
+        ax.step(timeline, survival, where='post', color=c, linewidth=2, label=lbl)
+
+    ax.set_xlabel('Tiempo')
+    ax.set_ylabel('Probabilidad de supervivencia')
+    ax.set_title('Kaplan-Meier')
+    ax.set_ylim(-0.02, 1.05)
+    ax.legend(loc='lower left', framealpha=0.8, fontsize=9)
+
+    if isinstance(result.get('p_value'), (int, float)):
+        p = result['p_value']
+        ax.text(0.95, 0.95, f'Log-rank p = {p:.4f}',
+                transform=ax.transAxes, fontsize=10, ha='right', va='top',
+                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
 
 
 def _p_to_stars(p):

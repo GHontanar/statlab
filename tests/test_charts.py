@@ -142,3 +142,90 @@ class TestPToStars:
 
     def test_boundary_05(self):
         assert _p_to_stars(0.05) == 'ns'  # 0.05 is not < 0.05
+
+
+# --- Nuevos tipos de figura -------------------------------------------------
+
+class TestBlandAltmanFigure:
+    def test_generates_without_error(self):
+        np.random.seed(42)
+        m1 = np.random.normal(100, 10, 20)
+        m2 = m1 + np.random.normal(1, 3, 20)
+        df = pd.DataFrame({'m1': m1, 'm2': m2})
+        result = {'bias': 1.0, 'sd_diff': 3.0, 'loa_upper': 6.88,
+                  'loa_lower': -4.88, 'p_value': 0.1}
+        fig = generate_figure('bland_altman', df, 'm1', 'm2', result=result)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_without_result(self):
+        df = pd.DataFrame({'m1': [1, 2, 3], 'm2': [1.1, 2.1, 3.1]})
+        fig = generate_figure('bland_altman', df, 'm1', 'm2', result=None)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+
+class TestROCFigure:
+    def test_generates_with_result(self):
+        result = {
+            'fpr': [0.0, 0.1, 0.5, 1.0],
+            'tpr': [0.0, 0.8, 0.95, 1.0],
+            'auc': 0.9,
+            'best_threshold': 5.0,
+            'sensitivity': 0.85,
+            'specificity': 0.90,
+            'p_value': None,
+        }
+        df = pd.DataFrame({'a': [1], 'b': [1]})
+        fig = generate_figure('roc', df, 'a', 'b', result=result)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_without_result_no_crash(self):
+        df = pd.DataFrame({'a': [1], 'b': [1]})
+        fig = generate_figure('roc', df, 'a', 'b', result=None)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+
+class TestKaplanMeierFigure:
+    def test_generates_with_curves(self):
+        result = {
+            'curves': {
+                'A': {'timeline': [0, 5, 10, 20], 'survival': [1.0, 0.9, 0.7, 0.5],
+                      'median': 15.0, 'n': 20},
+                'B': {'timeline': [0, 3, 8, 15], 'survival': [1.0, 0.8, 0.5, 0.3],
+                      'median': 8.0, 'n': 20},
+            },
+            'p_value': 0.03,
+            'statistic': 4.5,
+        }
+        df = pd.DataFrame({'a': [1], 'b': [1]})
+        fig = generate_figure('kaplan_meier', df, 'a', 'b', result=result)
+        assert isinstance(fig, plt.Figure)
+        ax = fig.axes[0]
+        # Should show log-rank p value
+        text_content = [t.get_text() for t in ax.texts]
+        assert any('p =' in t for t in text_content)
+        plt.close(fig)
+
+    def test_without_result_no_crash(self):
+        df = pd.DataFrame({'a': [1], 'b': [1]})
+        fig = generate_figure('kaplan_meier', df, 'a', 'b', result=None)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_single_group_no_pvalue(self):
+        result = {
+            'curves': {
+                'Global': {'timeline': [0, 5, 10], 'survival': [1.0, 0.8, 0.6],
+                           'median': 12.0, 'n': 30},
+            },
+            'p_value': None,
+        }
+        df = pd.DataFrame({'a': [1], 'b': [1]})
+        fig = generate_figure('kaplan_meier', df, 'a', 'b', result=result)
+        ax = fig.axes[0]
+        text_content = [t.get_text() for t in ax.texts]
+        assert not any('p =' in t for t in text_content)
+        plt.close(fig)

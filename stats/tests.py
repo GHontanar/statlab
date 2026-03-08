@@ -122,7 +122,61 @@ def _run_two_groups(test_id, df, var_dep, var_group, groups, alpha, paired_id_co
     return result
 
 
-def _run_multi_groups(test_id, df, var_dep, var_group, groups, alpha):
+# F6: Metodos post-hoc disponibles
+POSTHOC_METHODS = {
+    'anova': {
+        'tukey': ('Tukey HSD', 'Controla FWER. El mas usado para ANOVA.'),
+        'scheffe': ('Scheffe', 'Mas conservador. Util para comparaciones no planificadas.'),
+        'bonferroni_t': ('Bonferroni (t-test)', 'T-tests pareados con correccion Bonferroni.'),
+        'holm_t': ('Holm (t-test)', 'Menos conservador que Bonferroni, mas potencia.'),
+    },
+    'kruskal': {
+        'dunn_bonferroni': ('Dunn (Bonferroni)', 'Correccion Bonferroni. Conservador.'),
+        'dunn_holm': ('Dunn (Holm)', 'Menos conservador, mas potencia.'),
+        'dunn_bh': ('Dunn (Benjamini-Hochberg)', 'Controla FDR en vez de FWER. Menos conservador.'),
+        'conover_bonferroni': ('Conover (Bonferroni)', 'Mas potente que Dunn, usa t-aproximacion.'),
+    },
+}
+
+
+def _run_posthoc(test_id, posthoc_method, all_data, var_dep, var_group):
+    """Ejecuta el analisis post-hoc seleccionado."""
+    if test_id == 'anova':
+        if posthoc_method == 'scheffe':
+            ph = sp.posthoc_scheffe(all_data, val_col=var_dep, group_col=var_group)
+            return ph, 'Scheffe'
+        elif posthoc_method == 'bonferroni_t':
+            ph = sp.posthoc_ttest(all_data, val_col=var_dep, group_col=var_group,
+                                  p_adjust='bonferroni')
+            return ph, 'Bonferroni (t-test)'
+        elif posthoc_method == 'holm_t':
+            ph = sp.posthoc_ttest(all_data, val_col=var_dep, group_col=var_group,
+                                  p_adjust='holm')
+            return ph, 'Holm (t-test)'
+        else:  # tukey (default)
+            ph = sp.posthoc_tukey(all_data, val_col=var_dep, group_col=var_group)
+            return ph, 'Tukey HSD'
+    else:
+        if posthoc_method == 'dunn_holm':
+            ph = sp.posthoc_dunn(all_data, val_col=var_dep, group_col=var_group,
+                                 p_adjust='holm')
+            return ph, 'Dunn (Holm)'
+        elif posthoc_method == 'dunn_bh':
+            ph = sp.posthoc_dunn(all_data, val_col=var_dep, group_col=var_group,
+                                 p_adjust='fdr_bh')
+            return ph, 'Dunn (Benjamini-Hochberg)'
+        elif posthoc_method == 'conover_bonferroni':
+            ph = sp.posthoc_conover(all_data, val_col=var_dep, group_col=var_group,
+                                    p_adjust='bonferroni')
+            return ph, 'Conover (Bonferroni)'
+        else:  # dunn_bonferroni (default)
+            ph = sp.posthoc_dunn(all_data, val_col=var_dep, group_col=var_group,
+                                 p_adjust='bonferroni')
+            return ph, 'Dunn (Bonferroni)'
+
+
+def _run_multi_groups(test_id, df, var_dep, var_group, groups, alpha,
+                      posthoc_method=None):
     """Ejecuta tests de >2 grupos (ANOVA, Kruskal-Wallis) con post-hoc."""
     result = {}
     group_data = []
@@ -140,32 +194,28 @@ def _run_multi_groups(test_id, df, var_dep, var_group, groups, alpha):
     if test_id == 'anova':
         stat, p = stats.f_oneway(*group_data)
         result["test_name"] = "ANOVA one-way"
-        if p < alpha and len(group_data) > 2:
-            all_data = pd.concat([pd.DataFrame({var_dep: gd, var_group: name})
-                                  for gd, name in zip(group_data, group_names)])
-            try:
-                posthoc = sp.posthoc_tukey(all_data, val_col=var_dep, group_col=var_group)
-                result["posthoc"] = posthoc.to_dict()
-                result["posthoc_name"] = "Tukey HSD"
-            except Exception as e:
-                result["posthoc_error"] = f"Tukey HSD fallo: {str(e)}"
     else:
         stat, p = stats.kruskal(*group_data)
         result["test_name"] = "Kruskal-Wallis"
-        if p < alpha and len(group_data) > 2:
-            all_data = pd.concat([pd.DataFrame({var_dep: gd, var_group: name})
-                                  for gd, name in zip(group_data, group_names)])
-            try:
-                posthoc = sp.posthoc_dunn(all_data, val_col=var_dep, group_col=var_group,
-                                          p_adjust='bonferroni')
-                result["posthoc"] = posthoc.to_dict()
-                result["posthoc_name"] = "Dunn (Bonferroni)"
-            except Exception as e:
-                result["posthoc_error"] = f"Dunn fallo: {str(e)}"
 
     result["statistic"] = float(stat)
     result["p_value"] = float(p)
     result["significant"] = p < alpha
+
+    # Post-hoc si es significativo y hay >2 grupos
+    if p < alpha and len(group_data) > 2:
+        all_data = pd.concat([pd.DataFrame({var_dep: gd, var_group: name})
+                              for gd, name in zip(group_data, group_names)])
+        # Default post-hoc si no se especifica
+        if posthoc_method is None:
+            posthoc_method = 'tukey' if test_id == 'anova' else 'dunn_bonferroni'
+        try:
+            posthoc, posthoc_name = _run_posthoc(test_id, posthoc_method,
+                                                  all_data, var_dep, var_group)
+            result["posthoc"] = posthoc.to_dict()
+            result["posthoc_name"] = posthoc_name
+        except Exception as e:
+            result["posthoc_error"] = f"Post-hoc fallo: {str(e)}"
 
     # Effect size (eta squared for ANOVA)
     if test_id == 'anova':
@@ -241,7 +291,162 @@ def _run_categorical(test_id, df, var_dep, var_group, alpha):
     return result
 
 
-def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05, paired_id_col=None):
+def _run_bland_altman(df, var_dep, var_group):
+    """Bland-Altman: concordancia entre dos metodos de medicion."""
+    result = {}
+    clean = df[[var_dep, var_group]].dropna()
+    m1, m2 = clean[var_dep].values, clean[var_group].values
+    diff = m1 - m2
+    mean = (m1 + m2) / 2
+
+    bias = float(np.mean(diff))
+    sd_diff = float(np.std(diff, ddof=1))
+    loa_upper = bias + 1.96 * sd_diff
+    loa_lower = bias - 1.96 * sd_diff
+
+    result["test_name"] = "Bland-Altman"
+    result["bias"] = bias
+    result["sd_diff"] = sd_diff
+    result["loa_upper"] = float(loa_upper)
+    result["loa_lower"] = float(loa_lower)
+    result["n"] = len(clean)
+    result["means"] = mean.tolist()
+    result["diffs"] = diff.tolist()
+
+    # Test de sesgo (bias != 0)
+    stat, p = stats.ttest_1samp(diff, 0)
+    result["statistic"] = float(stat)
+    result["p_value"] = float(p)
+    result["significant"] = p < 0.05
+    return result
+
+
+def _run_roc(df, var_dep, var_group, positive_label=None):
+    """Curva ROC para variable binaria vs predictor continuo."""
+    result = {}
+    clean = df[[var_dep, var_group]].dropna()
+
+    # Binarizar variable de resultado
+    labels = sorted(clean[var_dep].unique())
+    if len(labels) != 2:
+        raise ValueError(f"La variable '{var_dep}' debe tener exactamente 2 categorias, "
+                         f"tiene {len(labels)}: {labels}")
+
+    pos = positive_label if positive_label else labels[1]
+    y_true = (clean[var_dep] == pos).astype(int).values
+    y_score = clean[var_group].values
+
+    # Calcular ROC manualmente (sin sklearn)
+    thresholds = np.sort(np.unique(y_score))[::-1]
+    tpr_list, fpr_list = [0.0], [0.0]
+    n_pos = y_true.sum()
+    n_neg = len(y_true) - n_pos
+
+    for t in thresholds:
+        predicted = (y_score >= t).astype(int)
+        tp = ((predicted == 1) & (y_true == 1)).sum()
+        fp = ((predicted == 1) & (y_true == 0)).sum()
+        tpr_list.append(tp / n_pos if n_pos > 0 else 0)
+        fpr_list.append(fp / n_neg if n_neg > 0 else 0)
+
+    fpr = np.array(fpr_list)
+    tpr = np.array(tpr_list)
+
+    # Ordenar por fpr
+    order = np.argsort(fpr)
+    fpr, tpr = fpr[order], tpr[order]
+
+    # AUC (trapezoidal)
+    auc = float(np.trapezoid(tpr, fpr))
+
+    # Youden's J para cutoff optimo
+    j_scores = tpr_list[1:] - np.array(fpr_list[1:])
+    best_idx = np.argmax(j_scores)
+    best_threshold = float(thresholds[best_idx])
+    best_sens = float(tpr_list[best_idx + 1])
+    best_spec = float(1 - fpr_list[best_idx + 1])
+
+    result["test_name"] = "Curva ROC"
+    result["auc"] = auc
+    result["fpr"] = fpr.tolist()
+    result["tpr"] = tpr.tolist()
+    result["best_threshold"] = best_threshold
+    result["sensitivity"] = best_sens
+    result["specificity"] = best_spec
+    result["positive_label"] = str(pos)
+    result["n"] = len(clean)
+    result["statistic"] = auc
+    result["p_value"] = None
+    result["significant"] = None
+    return result
+
+
+def _run_kaplan_meier(df, var_dep, var_group, group_col=None, groups=None, alpha=0.05):
+    """Kaplan-Meier: analisis de supervivencia."""
+    from lifelines import KaplanMeierFitter
+    from lifelines.statistics import logrank_test
+
+    result = {}
+    clean = df[[var_dep, var_group]].dropna()
+    if group_col:
+        clean = df[[var_dep, var_group, group_col]].dropna()
+
+    durations = clean[var_dep].values
+    events = clean[var_group].values
+
+    # Validar eventos binarios
+    unique_events = sorted(pd.Series(events).unique())
+    if not set(unique_events).issubset({0, 1, 0.0, 1.0, True, False}):
+        raise ValueError(f"La variable de evento debe ser binaria (0/1), "
+                         f"valores encontrados: {unique_events}")
+    events = events.astype(int)
+
+    result["test_name"] = "Kaplan-Meier"
+    result["n"] = len(clean)
+    result["curves"] = {}
+
+    if group_col and group_col in clean.columns:
+        group_labels = groups if groups else sorted(clean[group_col].unique())
+        for g in group_labels:
+            mask = clean[group_col] == g
+            kmf = KaplanMeierFitter()
+            kmf.fit(durations[mask], event_observed=events[mask], label=str(g))
+            result["curves"][str(g)] = {
+                "timeline": kmf.survival_function_.index.tolist(),
+                "survival": kmf.survival_function_.iloc[:, 0].tolist(),
+                "median": float(kmf.median_survival_time_) if np.isfinite(kmf.median_survival_time_) else None,
+                "n": int(mask.sum()),
+            }
+
+        # Log-rank test si hay 2+ grupos
+        if len(group_labels) >= 2:
+            g1_mask = clean[group_col] == group_labels[0]
+            g2_mask = clean[group_col] == group_labels[1]
+            lr = logrank_test(durations[g1_mask], durations[g2_mask],
+                              event_observed_A=events[g1_mask],
+                              event_observed_B=events[g2_mask])
+            result["statistic"] = float(lr.test_statistic)
+            result["p_value"] = float(lr.p_value)
+            result["significant"] = lr.p_value < alpha
+            result["logrank_name"] = f"Log-rank: {group_labels[0]} vs {group_labels[1]}"
+    else:
+        kmf = KaplanMeierFitter()
+        kmf.fit(durations, event_observed=events, label="Global")
+        result["curves"]["Global"] = {
+            "timeline": kmf.survival_function_.index.tolist(),
+            "survival": kmf.survival_function_.iloc[:, 0].tolist(),
+            "median": float(kmf.median_survival_time_) if np.isfinite(kmf.median_survival_time_) else None,
+            "n": int(len(durations)),
+        }
+        result["statistic"] = None
+        result["p_value"] = None
+        result["significant"] = None
+
+    return result
+
+
+def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05, paired_id_col=None,
+             extra=None):
     """Ejecuta el test estadistico seleccionado."""
     result = {"test": test_id, "var_dep": var_dep, "var_group": var_group, "alpha": alpha}
 
@@ -250,13 +455,26 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05, paired_id
             result.update(_run_two_groups(test_id, df, var_dep, var_group, groups, alpha,
                                           paired_id_col=paired_id_col))
         elif test_id in ('anova', 'kruskal'):
-            result.update(_run_multi_groups(test_id, df, var_dep, var_group, groups, alpha))
+            posthoc_method = extra.get('posthoc_method') if extra else None
+            result.update(_run_multi_groups(test_id, df, var_dep, var_group, groups, alpha,
+                                            posthoc_method=posthoc_method))
         elif test_id in ('pearson', 'spearman'):
             result.update(_run_correlation(test_id, df, var_dep, var_group, alpha))
         elif test_id == 'linear_reg':
             result.update(_run_regression(df, var_dep, var_group, alpha))
         elif test_id in ('chi2', 'fisher'):
             result.update(_run_categorical(test_id, df, var_dep, var_group, alpha))
+        elif test_id == 'bland_altman':
+            result.update(_run_bland_altman(df, var_dep, var_group))
+        elif test_id == 'roc':
+            positive_label = extra.get('positive_label') if extra else None
+            result.update(_run_roc(df, var_dep, var_group, positive_label))
+        elif test_id == 'kaplan_meier':
+            group_col = extra.get('group_col') if extra else None
+            km_groups = extra.get('groups') if extra else None
+            result.update(_run_kaplan_meier(df, var_dep, var_group,
+                                           group_col=group_col, groups=km_groups,
+                                           alpha=alpha))
 
         result["success"] = True
     except Exception as e:

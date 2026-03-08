@@ -189,16 +189,60 @@ class TestRunTestHappyPath:
         assert 'eta_squared' in r
         assert len(r['groups']) == 3
 
-    def test_anova_posthoc(self, three_group_df):
+    def test_anova_posthoc_default(self, three_group_df):
         r = run_test('anova', three_group_df, 'valor', 'grupo',
                      ['A', 'B', 'C'])
         assert 'posthoc' in r or 'posthoc_error' in r
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Tukey HSD'
+
+    def test_anova_posthoc_scheffe(self, three_group_df):
+        r = run_test('anova', three_group_df, 'valor', 'grupo',
+                     ['A', 'B', 'C'], extra={'posthoc_method': 'scheffe'})
+        assert r['success']
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Scheffe'
+
+    def test_anova_posthoc_bonferroni(self, three_group_df):
+        r = run_test('anova', three_group_df, 'valor', 'grupo',
+                     ['A', 'B', 'C'], extra={'posthoc_method': 'bonferroni_t'})
+        assert r['success']
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Bonferroni (t-test)'
+
+    def test_anova_posthoc_holm(self, three_group_df):
+        r = run_test('anova', three_group_df, 'valor', 'grupo',
+                     ['A', 'B', 'C'], extra={'posthoc_method': 'holm_t'})
+        assert r['success']
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Holm (t-test)'
 
     def test_kruskal(self, three_group_df):
         r = run_test('kruskal', three_group_df, 'valor', 'grupo',
                      ['A', 'B', 'C'])
         assert r['success']
         assert r['test_name'] == "Kruskal-Wallis"
+
+    def test_kruskal_posthoc_dunn_holm(self, three_group_df):
+        r = run_test('kruskal', three_group_df, 'valor', 'grupo',
+                     ['A', 'B', 'C'], extra={'posthoc_method': 'dunn_holm'})
+        assert r['success']
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Dunn (Holm)'
+
+    def test_kruskal_posthoc_dunn_bh(self, three_group_df):
+        r = run_test('kruskal', three_group_df, 'valor', 'grupo',
+                     ['A', 'B', 'C'], extra={'posthoc_method': 'dunn_bh'})
+        assert r['success']
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Dunn (Benjamini-Hochberg)'
+
+    def test_kruskal_posthoc_conover(self, three_group_df):
+        r = run_test('kruskal', three_group_df, 'valor', 'grupo',
+                     ['A', 'B', 'C'], extra={'posthoc_method': 'conover_bonferroni'})
+        assert r['success']
+        if 'posthoc' in r:
+            assert r['posthoc_name'] == 'Conover (Bonferroni)'
 
     def test_pearson(self, correlation_df):
         r = run_test('pearson', correlation_df, 'y', 'x')
@@ -315,3 +359,191 @@ class TestRunTestEdgeCases:
         assert r['success']
         assert 'warning' in r
         assert '2 pares' in r['warning']
+
+
+# --- Bland-Altman -----------------------------------------------------------
+
+@pytest.fixture
+def bland_altman_df():
+    """DataFrame con dos metodos de medicion correlacionados."""
+    np.random.seed(42)
+    n = 30
+    method1 = np.random.normal(100, 15, n)
+    method2 = method1 + np.random.normal(2, 5, n)  # sesgo de ~2
+    return pd.DataFrame({'metodo1': method1, 'metodo2': method2})
+
+
+class TestBlandAltman:
+    def test_basic_result(self, bland_altman_df):
+        r = run_test('bland_altman', bland_altman_df, 'metodo1', 'metodo2')
+        assert r['success']
+        assert r['test_name'] == 'Bland-Altman'
+        assert 'bias' in r
+        assert 'sd_diff' in r
+        assert 'loa_upper' in r
+        assert 'loa_lower' in r
+
+    def test_bias_approximately_correct(self, bland_altman_df):
+        r = run_test('bland_altman', bland_altman_df, 'metodo1', 'metodo2')
+        # Sesgo esperado ~-2 (method1 - method2, method2 = method1 + ~2)
+        assert abs(r['bias'] - (-2)) < 3
+
+    def test_limits_of_agreement_symmetric(self, bland_altman_df):
+        r = run_test('bland_altman', bland_altman_df, 'metodo1', 'metodo2')
+        # LOA deben ser simetricas respecto al sesgo
+        upper_dist = r['loa_upper'] - r['bias']
+        lower_dist = r['bias'] - r['loa_lower']
+        assert abs(upper_dist - lower_dist) < 0.001
+
+    def test_has_p_value(self, bland_altman_df):
+        r = run_test('bland_altman', bland_altman_df, 'metodo1', 'metodo2')
+        assert 'p_value' in r
+        assert isinstance(r['p_value'], float)
+
+    def test_n_correct(self, bland_altman_df):
+        r = run_test('bland_altman', bland_altman_df, 'metodo1', 'metodo2')
+        assert r['n'] == 30
+
+    def test_means_and_diffs_lists(self, bland_altman_df):
+        r = run_test('bland_altman', bland_altman_df, 'metodo1', 'metodo2')
+        assert len(r['means']) == 30
+        assert len(r['diffs']) == 30
+
+
+# --- ROC -------------------------------------------------------------------
+
+@pytest.fixture
+def roc_df():
+    """DataFrame con predictor continuo y desenlace binario."""
+    np.random.seed(42)
+    n = 60
+    # Buen predictor: enfermos tienen valores mas altos
+    score = np.concatenate([
+        np.random.normal(5, 1, n // 2),   # sanos
+        np.random.normal(8, 1, n // 2),    # enfermos
+    ])
+    outcome = ['Sano'] * (n // 2) + ['Enfermo'] * (n // 2)
+    return pd.DataFrame({'score': score, 'desenlace': outcome})
+
+
+class TestROC:
+    def test_basic_result(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert r['success']
+        assert r['test_name'] == 'Curva ROC'
+        assert 'auc' in r
+        assert 'fpr' in r
+        assert 'tpr' in r
+
+    def test_auc_high_for_good_predictor(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert r['auc'] > 0.85
+
+    def test_auc_range(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert 0 <= r['auc'] <= 1
+
+    def test_optimal_cutoff_exists(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert 'best_threshold' in r
+        assert 'sensitivity' in r
+        assert 'specificity' in r
+
+    def test_sensitivity_specificity_range(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert 0 <= r['sensitivity'] <= 1
+        assert 0 <= r['specificity'] <= 1
+
+    def test_positive_label_custom(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert r['success']
+        assert r['positive_label'] == 'Enfermo'
+
+    def test_default_positive_label(self, roc_df):
+        """Sin positive_label usa el segundo valor ordenado."""
+        r = run_test('roc', roc_df, 'desenlace', 'score')
+        assert r['success']
+        assert r['positive_label'] == 'Sano'  # sorted: ['Enfermo', 'Sano']
+
+    def test_non_binary_outcome_fails(self):
+        df = pd.DataFrame({
+            'score': [1, 2, 3, 4, 5, 6],
+            'desenlace': ['A', 'B', 'C', 'A', 'B', 'C'],
+        })
+        r = run_test('roc', df, 'desenlace', 'score')
+        assert not r['success']
+        assert '2 categorias' in r['error']
+
+    def test_p_value_is_none(self, roc_df):
+        r = run_test('roc', roc_df, 'desenlace', 'score',
+                     extra={'positive_label': 'Enfermo'})
+        assert r['p_value'] is None
+        assert r['significant'] is None
+
+
+# --- Kaplan-Meier -----------------------------------------------------------
+
+@pytest.fixture
+def survival_df():
+    """DataFrame con datos de supervivencia."""
+    np.random.seed(42)
+    n = 40
+    return pd.DataFrame({
+        'tiempo': np.concatenate([
+            np.random.exponential(20, n // 2),
+            np.random.exponential(10, n // 2),
+        ]),
+        'evento': np.random.binomial(1, 0.7, n),
+        'grupo': ['A'] * (n // 2) + ['B'] * (n // 2),
+    })
+
+
+class TestKaplanMeier:
+    def test_basic_no_groups(self, survival_df):
+        r = run_test('kaplan_meier', survival_df, 'tiempo', 'evento')
+        assert r['success']
+        assert r['test_name'] == 'Kaplan-Meier'
+        assert 'Global' in r['curves']
+        assert r['p_value'] is None
+
+    def test_curve_has_timeline_and_survival(self, survival_df):
+        r = run_test('kaplan_meier', survival_df, 'tiempo', 'evento')
+        curve = r['curves']['Global']
+        assert len(curve['timeline']) > 0
+        assert len(curve['survival']) > 0
+        assert curve['n'] == 40
+
+    def test_survival_starts_at_one(self, survival_df):
+        r = run_test('kaplan_meier', survival_df, 'tiempo', 'evento')
+        curve = r['curves']['Global']
+        assert curve['survival'][0] == 1.0 or curve['survival'][0] > 0.9
+
+    def test_with_groups_logrank(self, survival_df):
+        r = run_test('kaplan_meier', survival_df, 'tiempo', 'evento',
+                     extra={'group_col': 'grupo', 'groups': ['A', 'B']})
+        assert r['success']
+        assert 'A' in r['curves']
+        assert 'B' in r['curves']
+        assert isinstance(r['p_value'], float)
+        assert isinstance(r['statistic'], float)
+
+    def test_n_per_group(self, survival_df):
+        r = run_test('kaplan_meier', survival_df, 'tiempo', 'evento',
+                     extra={'group_col': 'grupo', 'groups': ['A', 'B']})
+        assert r['curves']['A']['n'] == 20
+        assert r['curves']['B']['n'] == 20
+
+    def test_invalid_event_variable(self):
+        df = pd.DataFrame({
+            'tiempo': [1, 2, 3, 4, 5],
+            'evento': [0, 1, 2, 3, 4],
+        })
+        r = run_test('kaplan_meier', df, 'tiempo', 'evento')
+        assert not r['success']
+        assert 'binaria' in r['error']

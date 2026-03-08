@@ -3,7 +3,7 @@
 ## Estado actual
 
 App modular basada en Streamlit para analisis estadistico y generacion de figuras.
-Estructura en capas: `stats/`, `charts/`, `reports/`, `utils/`, con 98 tests y ~90% de cobertura.
+Estructura en capas: `stats/`, `charts/`, `reports/`, `utils/`, con 153 tests y ~90% de cobertura.
 
 ---
 
@@ -15,7 +15,7 @@ Estructura en capas: `stats/`, `charts/`, `reports/`, `utils/`, con 98 tests y ~
 ### B4. ~~`warnings.filterwarnings('ignore')` global~~ ✔
 ### A1. ~~Separar en modulos~~ ✔
 ### A2. ~~Tests unitarios~~ ✔
-98 tests con pytest. Cobertura ~90%.
+153 tests con pytest. Cobertura ~90%.
 ### A3. ~~Validacion de entrada~~ ✔
 validate_continuous (tipo numerico, NaN), validate_group_sizes (n minimo por grupo).
 ### G1. ~~Resolucion y formato de exportacion~~ ✔
@@ -35,20 +35,44 @@ validate_continuous (tipo numerico, NaN), validate_group_sizes (n minimo por gru
 
 ---
 
-## Pendiente
-
-### G8. Personalizacion de figuras por el usuario
-- Panel con opciones: titulo, xlabel, ylabel, paleta de colores
+### G8. ~~Personalizacion de figuras por el usuario~~ ✔
+Panel con opciones: titulo, xlabel, ylabel, paleta de colores.
+### F1. ~~Kaplan-Meier (survival)~~ ✔
+Curvas de supervivencia, mediana, comparacion de grupos con log-rank test.
+### F2. ~~Bland-Altman~~ ✔
+Concordancia entre metodos: sesgo, limites de acuerdo, test de sesgo.
+### F3. ~~Curvas ROC~~ ✔
+AUC, corte optimo (Youden's J), sensibilidad/especificidad.
 
 ---
 
-### Features nuevas
+## Completado (reciente)
 
-#### F1. Kaplan-Meier (survival)
-#### F2. Bland-Altman
-#### F3. Curvas ROC
-#### F4. Informe PDF mejorado (reportlab en vez de matplotlib text)
-#### F6. Multiples comparaciones avanzadas
+### P1. ~~Interpretacion en lenguaje natural~~ ✔
+Parrafo auto-generado listo para copiar en Resultados de un paper. Cubre todos los tests.
+### P2. ~~Preguntas en vez de jerga~~ ✔
+Selector reformulado como preguntas de investigacion.
+### P3. ~~Etiquetas sin jerga estadistica~~ ✔
+"Que mediste?", "Como se dividen los sujetos?", tooltips en widgets clave.
+### P4. ~~Preseleccion automatica del test~~ ✔
+Test recomendado con explicacion; alternativas en expander "Cambiar test (avanzado)".
+### P5. ~~Figura automatica con el resultado~~ ✔
+Auto-genera la figura mas apropiada junto a los resultados.
+### P6. ~~Tabla descriptiva visible~~ ✔
+Tabla con n, media, DE, mediana por grupo antes del p-valor.
+### P7. ~~Simplificar definicion de variables~~ ✔
+Solo selectbox para ambiguas; claras en resumen; expander para corregir.
+### P8. ~~Advertencias contextuales~~ ✔
+Warnings para n < 10, normalidad con n < 20, grupos desbalanceados.
+
+---
+
+### F4. ~~Informe PDF mejorado~~ ✔
+Reportlab en vez de matplotlib text. Portada, tablas descriptivas, tablas de resultados, interpretacion, figuras embebidas.
+### F6. ~~Multiples comparaciones avanzadas~~ ✔
+ANOVA: Tukey HSD, Scheffe, Bonferroni (t-test), Holm (t-test).
+Kruskal: Dunn (Bonferroni/Holm/BH), Conover (Bonferroni).
+Selector en UI con explicacion de cada metodo.
 
 ---
 
@@ -62,5 +86,14 @@ validate_continuous (tipo numerico, NaN), validate_group_sizes (n minimo por gru
 
 ## Prioridades sugeridas
 
-1. Personalizacion de figuras (G8)
-2. Features nuevas (F1-F4, F6)
+1. Interpretacion en lenguaje natural + copiar para paper (P1)
+2. Preguntas y etiquetas sin jerga (P2 + P3)
+3. Preseleccion inteligente del test (P4)
+4. Tabla descriptiva visible (P6)
+5. Figura automatica (P5)
+6. Simplificar definicion de variables (P7)
+7. Advertencias contextuales (P8)
+~~8. Informe PDF mejorado (F4)~~ ✔
+~~9. Multiples comparaciones avanzadas (F6)~~ ✔
+
+**Roadmap completo. Todos los items implementados.**

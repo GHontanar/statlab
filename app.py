@@ -12,10 +12,25 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 from utils.data import infer_variable_type, validate_continuous, validate_group_sizes
-from stats.tests import check_normality, suggest_test, run_test
+from stats.tests import check_normality, suggest_test, run_test, POSTHOC_METHODS
 from charts.figures import generate_figure
-from reports.text import format_result_text
+from reports.text import format_result_text, generate_interpretation
+import matplotlib.pyplot as plt
 from reports.pdf import generate_pdf_report
+
+# Constantes para tipos de analisis
+Q_DIFF_GROUPS = "Hay diferencia entre grupos?"
+Q_CORRELATION = "Estan relacionadas dos mediciones?"
+Q_ASSOCIATION = "Se asocian dos categorias?"
+Q_AGREEMENT = "Dos metodos miden lo mismo?"
+Q_PREDICTION = "Un valor predice un desenlace?"
+Q_SURVIVAL = "Cuanto tiempo hasta un evento?"
+
+
+def _close_figures():
+    """Cierra las figuras matplotlib almacenadas en session_state."""
+    for fig in st.session_state.get('figures', []):
+        plt.close(fig)
 
 # --- Configuracion general ---------------------------------------------------
 st.set_page_config(
@@ -134,6 +149,45 @@ Funciona bien con n entre 3 y 5000.
 Con n muy grande, casi todo resulta "no normal" por exceso de poder.
 """)
 
+    with st.expander("Bland-Altman"):
+        st.markdown("""
+Evalua **concordancia** entre dos metodos de medicion.
+
+- **Sesgo (bias)**: diferencia media entre metodos
+- **Limites de acuerdo**: sesgo +/- 1.96 DE
+- Si el sesgo no es significativo y los limites son clinicamente aceptables,
+  los metodos son intercambiables.
+
+*Ejemplo: Comparar medicion de glucosa con dos dispositivos distintos.*
+""")
+
+    with st.expander("Curva ROC"):
+        st.markdown("""
+Evalua la **capacidad discriminativa** de un predictor continuo
+para un desenlace binario.
+
+| Metrica | Descripcion |
+|---------|------------|
+| AUC | Area bajo la curva (0.5=azar, 1.0=perfecto) |
+| Sensibilidad | Verdaderos positivos correctamente identificados |
+| Especificidad | Verdaderos negativos correctamente identificados |
+| Corte optimo | Threshold que maximiza Youden's J |
+
+*Ejemplo: Evaluar si un biomarcador predice enfermedad (si/no).*
+""")
+
+    with st.expander("Kaplan-Meier"):
+        st.markdown("""
+**Analisis de supervivencia**: estima la probabilidad de que un
+evento no haya ocurrido en funcion del tiempo.
+
+- Necesitas: **tiempo** hasta evento y **estado** del evento (0=censurado, 1=evento)
+- Opcional: variable de grupo para comparar curvas
+- **Log-rank test**: compara curvas entre 2 grupos
+
+*Ejemplo: Tiempo hasta recaida en pacientes con dos tratamientos.*
+""")
+
     with st.expander("Tamano del efecto"):
         st.markdown("""
 El p-valor indica si hay diferencia, pero no su magnitud.
@@ -227,20 +281,64 @@ if df is not None:
 
     # --- PASO 2: Definicion de variables --------------------------------------
     st.header("2. Definicion de variables")
-    st.info("StatLab infiere automaticamente el tipo, pero puedes corregirlo.")
 
     cols = df.columns.tolist()
     var_types = {}
-    col_grid = st.columns(3)
-    for i, col_name in enumerate(cols):
-        inferred = infer_variable_type(df[col_name])
-        with col_grid[i % 3]:
-            var_types[col_name] = st.selectbox(
-                f"`{col_name}`",
-                ['Continua', 'Categorica'],
-                index=0 if inferred == 'Continua' else 1,
-                key=f"vtype_{col_name}"
-            )
+    # P7: Separar variables claras de ambiguas
+    _clear_vars = []
+    _ambiguous_vars = []
+    for col_name in cols:
+        dtype = df[col_name].dtype
+        # Claramente categorica: string/object/category
+        if dtype in ('object', 'category'):
+            _clear_vars.append((col_name, 'Categorica'))
+        # Claramente continua: float
+        elif dtype in ('float64', 'float32'):
+            _clear_vars.append((col_name, 'Continua'))
+        # Ambiguo: integers, bools, etc.
+        else:
+            _ambiguous_vars.append((col_name, infer_variable_type(df[col_name])))
+
+    # Mostrar variables claras como resumen
+    if _clear_vars:
+        _cont = [c for c, t in _clear_vars if t == 'Continua']
+        _cat = [c for c, t in _clear_vars if t == 'Categorica']
+        _summary = []
+        if _cont:
+            _summary.append(f"**Continuas**: {', '.join(_cont)}")
+        if _cat:
+            _summary.append(f"**Categoricas**: {', '.join(_cat)}")
+        st.success("Detectadas automaticamente: " + " | ".join(_summary))
+
+    # Asignar las claras
+    for col_name, vtype in _clear_vars:
+        var_types[col_name] = vtype
+
+    # Solo mostrar selectbox para las ambiguas + expander para corregir las claras
+    if _ambiguous_vars:
+        st.info("Revisa estas variables (la inferencia puede no ser correcta):")
+        amb_grid = st.columns(min(3, len(_ambiguous_vars)))
+        for i, (col_name, inferred) in enumerate(_ambiguous_vars):
+            with amb_grid[i % min(3, len(_ambiguous_vars))]:
+                var_types[col_name] = st.selectbox(
+                    f"`{col_name}`",
+                    ['Continua', 'Categorica'],
+                    index=0 if inferred == 'Continua' else 1,
+                    key=f"vtype_{col_name}"
+                )
+
+    with st.expander("Corregir tipos de variable"):
+        corr_grid = st.columns(3)
+        for i, col_name in enumerate(cols):
+            current = var_types.get(col_name, 'Continua')
+            with corr_grid[i % 3]:
+                var_types[col_name] = st.selectbox(
+                    f"`{col_name}`",
+                    ['Continua', 'Categorica'],
+                    index=0 if current == 'Continua' else 1,
+                    key=f"vtype_corr_{col_name}"
+                )
+
     st.session_state.var_types = var_types
 
     # --- PASO 3: Configuracion del analisis -----------------------------------
@@ -250,24 +348,34 @@ if df is not None:
     categorical_vars = [c for c, t in var_types.items() if t == 'Categorica']
 
     analysis_type = st.radio(
-        "Tipo de analisis",
-        ["Comparacion de grupos", "Correlacion / Regresion", "Tabla de contingencia"],
-        horizontal=True
+        "Que quieres averiguar?",
+        [Q_DIFF_GROUPS, Q_CORRELATION, Q_ASSOCIATION,
+         Q_AGREEMENT, Q_PREDICTION, Q_SURVIVAL],
+        horizontal=True,
+        help="Elige la pregunta que mejor describe tu objetivo de investigacion."
     )
+
+    # Inicializar variables compartidas
+    paired_id_col = None
+    _posthoc_method = None
+    n_groups = None
+    selected_groups = None
 
     col_left, col_right = st.columns(2)
 
-    if analysis_type == "Comparacion de grupos":
+    if analysis_type == Q_DIFF_GROUPS:
         with col_left:
             if not continuous_vars:
                 st.warning("No hay variables continuas definidas")
                 st.stop()
-            var_dep = st.selectbox("Variable dependiente (continua)", continuous_vars)
+            var_dep = st.selectbox("Que mediste?", continuous_vars,
+                                   help="La variable numerica que quieres comparar: peso, hemoglobina, score...")
         with col_right:
             if not categorical_vars:
                 st.warning("No hay variables categoricas definidas")
                 st.stop()
-            var_group = st.selectbox("Variable de agrupacion (categorica)", categorical_vars)
+            var_group = st.selectbox("Como se dividen los sujetos?", categorical_vars,
+                                     help="La variable que define los grupos: tratamiento, sexo, diagnostico...")
 
         # A3: Validar que la variable continua sea numerica
         ok, err = validate_continuous(df, var_dep)
@@ -294,6 +402,17 @@ if df is not None:
 
         n_groups = len(selected_groups)
 
+        # P8: Advertencias contextuales
+        _min_count = min(counts.values())
+        _max_count = max(counts.values())
+        if _min_count < 10:
+            st.warning(f"Muestra pequena (n = {_min_count} en algun grupo). "
+                       "Los resultados pueden no ser fiables. "
+                       "Considera usar un test no parametrico.")
+        if _max_count > 0 and _min_count > 0 and _max_count / _min_count > 3:
+            st.warning(f"Grupos muy desbalanceados (n = {_min_count} vs {_max_count}). "
+                       "Los resultados pueden verse afectados por el desbalance.")
+
         # Normalidad
         st.subheader("Comprobacion de normalidad")
         norm_cols = st.columns(min(n_groups, 4))
@@ -311,7 +430,13 @@ if df is not None:
                 else:
                     st.metric(f"{g}", "N/A")
 
-        paired = st.checkbox("Datos pareados?", value=False)
+        # P8: Advertencia normalidad con n pequeno
+        if _min_count < 20 and all_normal:
+            st.info("Con muestras pequenas (n < 20), el test de normalidad tiene poco poder. "
+                    "Si tienes dudas, un test no parametrico es mas seguro.")
+
+        paired = st.checkbox("Mediciones repetidas del mismo sujeto?", value=False,
+                             help="Marca esto si mediste lo mismo antes y despues, o el mismo paciente con dos metodos.")
 
         # U3: Selector de columna ID para emparejar sujetos
         paired_id_col = None
@@ -328,12 +453,25 @@ if df is not None:
         suggestions = suggest_test('Continua', 'Categorica', n_groups, paired, all_normal)
 
         if suggestions:
-            st.subheader("Test sugerido")
-            if all_normal:
-                st.success("Datos normales -> se sugiere test parametrico")
-            else:
-                st.warning("Datos no normales -> se sugiere test no parametrico")
+            recommended_name, recommended_id = suggestions[0]
 
+            # P4: Explicar por que se recomienda este test
+            if all_normal:
+                _reason = "Tus datos siguen una distribucion normal (Shapiro-Wilk p > 0.05)"
+                if paired:
+                    _reason += " y son mediciones repetidas del mismo sujeto"
+                elif n_groups == 2:
+                    _reason += " y tienes 2 grupos independientes"
+                else:
+                    _reason += f" y tienes {n_groups} grupos independientes"
+                _reason += " → test parametrico."
+            else:
+                _reason = "Tus datos NO siguen una distribucion normal (Shapiro-Wilk p < 0.05)"
+                _reason += " → test no parametrico (no asume normalidad)."
+
+            st.success(f"**Recomendado: {recommended_name}**  \n{_reason}")
+
+            # P4: Alternativas en expander
             all_tests = {}
             if n_groups == 2:
                 all_tests = {
@@ -349,25 +487,47 @@ if df is not None:
                     "Kruskal-Wallis": "kruskal",
                 }
 
-            selected_test_name = st.selectbox(
-                "Elige el test",
-                options=list(all_tests.keys()),
-                index=list(all_tests.keys()).index(suggestions[0][0]) if suggestions[0][0] in all_tests else 0
-            )
-            selected_test_id = all_tests[selected_test_name]
+            selected_test_id = recommended_id
+            with st.expander("Cambiar test (avanzado)"):
+                selected_test_name = st.selectbox(
+                    "Elige otro test",
+                    options=list(all_tests.keys()),
+                    index=list(all_tests.keys()).index(recommended_name) if recommended_name in all_tests else 0
+                )
+                selected_test_id = all_tests[selected_test_name]
+
+            # F6: Selector de metodo post-hoc para >2 grupos
+            _posthoc_method = None
+            if n_groups > 2:
+                _ph_key = 'anova' if selected_test_id == 'anova' else 'kruskal'
+                _ph_options = POSTHOC_METHODS[_ph_key]
+                _ph_default = 'tukey' if _ph_key == 'anova' else 'dunn_bonferroni'
+                _ph_labels = {v[0]: k for k, v in _ph_options.items()}
+                with st.expander("Metodo post-hoc (comparaciones multiples)"):
+                    for method_id, (name, desc) in _ph_options.items():
+                        st.markdown(f"- **{name}**: {desc}")
+                    _ph_choice = st.selectbox(
+                        "Metodo post-hoc",
+                        options=[v[0] for v in _ph_options.values()],
+                        index=list(_ph_options.keys()).index(_ph_default),
+                        help="Se aplica solo si el test principal es significativo y hay >2 grupos."
+                    )
+                    _posthoc_method = _ph_labels[_ph_choice]
         else:
             st.error("No se encontro un test adecuado para esta configuracion.")
             st.stop()
 
-    elif analysis_type == "Correlacion / Regresion":
+    elif analysis_type == Q_CORRELATION:
         with col_left:
             if len(continuous_vars) < 2:
                 st.warning("Necesitas al menos 2 variables continuas")
                 st.stop()
-            var_dep = st.selectbox("Variable Y", continuous_vars)
+            var_dep = st.selectbox("Variable a explicar", continuous_vars,
+                                   help="La variable que quieres predecir o cuya variacion quieres entender.")
         with col_right:
             remaining = [c for c in continuous_vars if c != var_dep]
-            var_group = st.selectbox("Variable X", remaining)
+            var_group = st.selectbox("Variable explicativa", remaining,
+                                     help="La variable que crees que puede influir o estar relacionada.")
 
         # A3: Validar que ambas variables sean numericas
         for _v in [var_dep, var_group]:
@@ -385,7 +545,7 @@ if df is not None:
         selected_test_name = st.selectbox("Elige el test", list(all_tests.keys()))
         selected_test_id = all_tests[selected_test_name]
 
-    elif analysis_type == "Tabla de contingencia":
+    elif analysis_type == Q_ASSOCIATION:
         with col_left:
             if len(categorical_vars) < 2:
                 st.warning("Necesitas al menos 2 variables categoricas")
@@ -403,32 +563,148 @@ if df is not None:
         selected_test_name = st.selectbox("Elige el test", list(all_tests.keys()))
         selected_test_id = all_tests[selected_test_name]
 
+    elif analysis_type == Q_AGREEMENT:
+        st.info("Compara concordancia entre dos metodos de medicion (variables continuas).")
+        with col_left:
+            if len(continuous_vars) < 2:
+                st.warning("Necesitas al menos 2 variables continuas")
+                st.stop()
+            var_dep = st.selectbox("Metodo 1", continuous_vars)
+        with col_right:
+            remaining = [c for c in continuous_vars if c != var_dep]
+            var_group = st.selectbox("Metodo 2", remaining)
+
+        for _v in [var_dep, var_group]:
+            ok, err = validate_continuous(df, _v)
+            if not ok:
+                st.error(err)
+                st.stop()
+
+        selected_groups = None
+        selected_test_id = 'bland_altman'
+
+    elif analysis_type == Q_PREDICTION:
+        st.info("Evalua capacidad discriminativa de un predictor continuo para un desenlace binario.")
+        with col_left:
+            if not categorical_vars:
+                st.warning("Necesitas una variable categorica binaria (desenlace)")
+                st.stop()
+            var_dep = st.selectbox("Variable de desenlace (binaria)", categorical_vars)
+        with col_right:
+            if not continuous_vars:
+                st.warning("Necesitas una variable continua (predictor)")
+                st.stop()
+            var_group = st.selectbox("Variable predictora (continua)", continuous_vars)
+
+        # Validar que el desenlace sea binario
+        n_cats = df[var_dep].dropna().nunique()
+        if n_cats != 2:
+            st.error(f"La variable '{var_dep}' debe tener exactamente 2 categorias, tiene {n_cats}.")
+            st.stop()
+
+        ok, err = validate_continuous(df, var_group)
+        if not ok:
+            st.error(err)
+            st.stop()
+
+        cat_labels = sorted(df[var_dep].dropna().unique())
+        positive_label = st.selectbox("Etiqueta positiva", cat_labels,
+                                      index=len(cat_labels) - 1)
+
+        selected_groups = None
+        selected_test_id = 'roc'
+
+    elif analysis_type == Q_SURVIVAL:
+        st.info("Analisis de supervivencia. Necesitas: tiempo hasta evento y variable de evento (0/1).")
+        with col_left:
+            if not continuous_vars:
+                st.warning("Necesitas una variable continua (tiempo)")
+                st.stop()
+            var_dep = st.selectbox("Tiempo hasta evento", continuous_vars)
+        with col_right:
+            var_group = st.selectbox("Variable de evento (0=censurado, 1=evento)",
+                                     continuous_vars + categorical_vars)
+
+        ok, err = validate_continuous(df, var_dep)
+        if not ok:
+            st.error(err)
+            st.stop()
+
+        km_group_col = None
+        km_groups = None
+        if categorical_vars:
+            _km_group_options = ["(sin comparacion)"] + categorical_vars
+            km_group_col = st.selectbox("Variable de grupo (opcional, para comparar curvas)",
+                                        _km_group_options)
+            if km_group_col == "(sin comparacion)":
+                km_group_col = None
+            else:
+                all_km_groups = sorted(df[km_group_col].dropna().unique())
+                km_groups = st.multiselect("Grupos a comparar", all_km_groups,
+                                           default=all_km_groups[:min(4, len(all_km_groups))])
+                if len(km_groups) < 1:
+                    st.warning("Selecciona al menos 1 grupo.")
+                    st.stop()
+
+        selected_groups = None
+        selected_test_id = 'kaplan_meier'
+
     # Alpha
-    alpha = st.slider("Nivel de significancia (alpha)", 0.001, 0.10, 0.05, 0.005)
+    alpha = st.slider("Nivel de significancia (alpha)", 0.001, 0.10, 0.05, 0.005,
+                      help="Usualmente 0.05. Valores menores (0.01) son mas exigentes. Solo cambia esto si sabes por que.")
 
     # --- Ejecutar test --------------------------------------------------------
     if st.button("Ejecutar analisis", type="primary", use_container_width=True):
         with st.spinner("Calculando..."):
-            _id_col = paired_id_col if (analysis_type == "Comparacion de grupos"
-                                        and paired and 'paired_id_col' in dir()) else None
+            _extra = {}
+            if analysis_type == Q_DIFF_GROUPS and n_groups and n_groups > 2:
+                _extra['posthoc_method'] = _posthoc_method
+            if analysis_type == Q_PREDICTION:
+                _extra['positive_label'] = positive_label
+            elif analysis_type == Q_SURVIVAL:
+                _extra['group_col'] = km_group_col
+                _extra['groups'] = km_groups
+            _extra = _extra or None
             result = run_test(selected_test_id, df, var_dep, var_group,
-                              selected_groups, alpha, paired_id_col=_id_col)
+                              selected_groups, alpha, paired_id_col=paired_id_col,
+                              extra=_extra)
             st.session_state.results.append(result)
 
         if result.get('success'):
             st.subheader("Resultados")
 
+            # P6: Tabla descriptiva visible
+            if result.get('groups') and isinstance(result.get('n'), list):
+                desc_data = {'Grupo': result['groups'], 'n': result['n']}
+                if result.get('mean') and isinstance(result['mean'], list):
+                    desc_data['Media'] = [f"{m:.2f}" for m in result['mean']]
+                    desc_data['DE'] = [f"{s:.2f}" for s in result['std']]
+                if result.get('median') and isinstance(result['median'], list):
+                    desc_data['Mediana'] = [f"{m:.2f}" for m in result['median']]
+                st.dataframe(pd.DataFrame(desc_data).set_index('Grupo'),
+                             use_container_width=True)
+
             rcols = st.columns(3)
             with rcols[0]:
-                st.metric("Estadistico", f"{result.get('statistic', 0):.4f}")
-            with rcols[1]:
-                p = result.get('p_value', 1)
-                st.metric("p-valor", f"{p:.6f}")
-            with rcols[2]:
-                if result['significant']:
-                    st.markdown("### Significativo")
+                stat_val = result.get('statistic')
+                if isinstance(stat_val, (int, float)):
+                    st.metric("Estadistico", f"{stat_val:.4f}")
                 else:
+                    st.metric("Estadistico", "N/A")
+            with rcols[1]:
+                p = result.get('p_value')
+                if isinstance(p, (int, float)):
+                    st.metric("p-valor", f"{p:.6f}")
+                else:
+                    st.metric("p-valor", "N/A")
+            with rcols[2]:
+                sig = result.get('significant')
+                if sig is True:
+                    st.markdown("### Significativo")
+                elif sig is False:
                     st.markdown("### No significativo")
+                else:
+                    st.markdown("### —")
 
             if result.get('warning'):
                 st.warning(result['warning'])
@@ -441,8 +717,47 @@ if df is not None:
                 st.info(f"Tamano del efecto: eta2 = {result['eta_squared']:.3f}")
             if result.get('r_squared') is not None:
                 st.info(f"R2 = {result['r_squared']:.3f}")
+            if result.get('auc') is not None:
+                st.info(f"AUC = {result['auc']:.3f}")
+                if result.get('best_threshold') is not None:
+                    st.info(f"Corte optimo: {result['best_threshold']:.3f} "
+                            f"(Sens={result['sensitivity']:.3f}, "
+                            f"Esp={result['specificity']:.3f})")
+            if result.get('bias') is not None:
+                st.info(f"Sesgo = {result['bias']:.3f}, "
+                        f"Limites de acuerdo: [{result['loa_lower']:.3f}, {result['loa_upper']:.3f}]")
+            if result.get('curves'):
+                with st.expander("Curvas de supervivencia", expanded=True):
+                    for label, data in result['curves'].items():
+                        med = data.get('median')
+                        med_str = f"{med:.1f}" if med is not None else "no alcanzada"
+                        st.markdown(f"**{label}**: n={data['n']}, mediana={med_str}")
 
-            with st.expander("Detalle completo", expanded=True):
+            # P1: Interpretacion en lenguaje natural
+            interpretation = generate_interpretation(result)
+            if interpretation:
+                st.markdown("**Para tu publicacion:**")
+                st.code(interpretation, language=None)
+
+            # P5: Figura automatica
+            _auto_fig_map = {
+                Q_DIFF_GROUPS: "boxplot",
+                Q_CORRELATION: "scatter",
+                Q_ASSOCIATION: None,
+                Q_AGREEMENT: "bland_altman",
+                Q_PREDICTION: "roc",
+                Q_SURVIVAL: "kaplan_meier",
+            }
+            _auto_fig_type = _auto_fig_map.get(analysis_type)
+            if _auto_fig_type:
+                _auto_groups = selected_groups if analysis_type == Q_DIFF_GROUPS else None
+                auto_fig = generate_figure(
+                    _auto_fig_type, df, var_dep, var_group,
+                    _auto_groups, result, options=fig_options)
+                st.pyplot(auto_fig)
+                st.session_state.figures.append(auto_fig)
+
+            with st.expander("Detalle completo"):
                 st.text(format_result_text(result))
 
             # U2: Tabla de contingencia visual
@@ -462,7 +777,7 @@ if df is not None:
     st.header("4. Figuras")
 
     available_figs = {}
-    if analysis_type == "Comparacion de grupos":
+    if analysis_type == Q_DIFF_GROUPS:
         available_figs = {
             "Box plot + puntos": "boxplot",
             "Violin plot": "violin",
@@ -470,10 +785,22 @@ if df is not None:
             "Datos pareados": "paired",
             "Histograma por grupo": "histogram",
         }
-    elif analysis_type == "Correlacion / Regresion":
+    elif analysis_type == Q_CORRELATION:
         available_figs = {
             "Scatter + regresion": "scatter",
             "Histograma": "histogram",
+        }
+    elif analysis_type == Q_AGREEMENT:
+        available_figs = {
+            "Bland-Altman": "bland_altman",
+        }
+    elif analysis_type == Q_PREDICTION:
+        available_figs = {
+            "Curva ROC": "roc",
+        }
+    elif analysis_type == Q_SURVIVAL:
+        available_figs = {
+            "Kaplan-Meier": "kaplan_meier",
         }
     else:
         available_figs = {
@@ -484,6 +811,7 @@ if df is not None:
                                    list(available_figs.keys()))
 
     if selected_figs and st.button("Generar figuras", use_container_width=True):
+        _close_figures()
         st.session_state.figures = []
         last_result = st.session_state.results[-1] if st.session_state.results else None
 
@@ -491,7 +819,7 @@ if df is not None:
             fig_type = available_figs[fig_name]
             fig = generate_figure(
                 fig_type, df, var_dep, var_group,
-                selected_groups if analysis_type == "Comparacion de grupos" else None,
+                selected_groups if analysis_type == Q_DIFF_GROUPS else None,
                 last_result,
                 options=fig_options,
             )
@@ -575,6 +903,7 @@ if df is not None:
                     st.markdown(f"**{i+1}.** Error")
             # U1: Boton para limpiar historial
             if st.button("Limpiar historial", type="secondary"):
+                _close_figures()
                 st.session_state.results = []
                 st.session_state.figures = []
                 st.rerun()
@@ -596,4 +925,7 @@ else:
     **Comparacion de >2 grupos:** ANOVA + Tukey, Kruskal-Wallis + Dunn
     **Correlacion:** Pearson, Spearman, regresion lineal
     **Categoricas:** Chi-cuadrado, Fisher
+    **Concordancia:** Bland-Altman
+    **Discriminacion:** Curva ROC (AUC, corte optimo)
+    **Supervivencia:** Kaplan-Meier, log-rank
     """)
