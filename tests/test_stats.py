@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 import pytest
-from stats.tests import check_normality, suggest_test, run_test
+from stats.tests import check_normality, check_homogeneity, suggest_test, run_test
 
 
 # --- Fixtures ----------------------------------------------------------------
@@ -547,3 +547,114 @@ class TestKaplanMeier:
         r = run_test('kaplan_meier', df, 'tiempo', 'evento')
         assert not r['success']
         assert 'binaria' in r['error']
+
+
+# --- S1: Levene (homogeneidad de varianzas) ---------------------------------
+
+class TestCheckHomogeneity:
+    def test_equal_variances(self):
+        np.random.seed(42)
+        g1 = pd.Series(np.random.normal(10, 1, 30))
+        g2 = pd.Series(np.random.normal(12, 1, 30))
+        stat, p = check_homogeneity([g1, g2])
+        assert stat is not None
+        assert p > 0.05  # varianzas iguales
+
+    def test_unequal_variances(self):
+        np.random.seed(42)
+        g1 = pd.Series(np.random.normal(10, 1, 30))
+        g2 = pd.Series(np.random.normal(12, 5, 30))
+        stat, p = check_homogeneity([g1, g2])
+        assert stat is not None
+        assert p < 0.05  # varianzas distintas
+
+    def test_too_few_groups(self):
+        g1 = pd.Series([1, 2, 3])
+        stat, p = check_homogeneity([g1])
+        assert stat is None
+        assert p is None
+
+    def test_too_few_samples(self):
+        g1 = pd.Series([1.0])
+        g2 = pd.Series([2.0, 3.0])
+        stat, p = check_homogeneity([g1, g2])
+        assert stat is None
+        assert p is None
+
+    def test_three_groups(self):
+        np.random.seed(42)
+        g1 = pd.Series(np.random.normal(10, 1, 20))
+        g2 = pd.Series(np.random.normal(12, 1, 20))
+        g3 = pd.Series(np.random.normal(14, 1, 20))
+        stat, p = check_homogeneity([g1, g2, g3])
+        assert stat is not None
+        assert p is not None
+
+
+class TestSuggestTestEqualVar:
+    def test_normal_equal_var_recommends_ttest(self):
+        suggestions = suggest_test('Continua', 'Categorica', 2, paired=False,
+                                   normal=True, equal_var=True)
+        assert suggestions[0][1] == 't_independent'
+
+    def test_normal_unequal_var_recommends_welch(self):
+        suggestions = suggest_test('Continua', 'Categorica', 2, paired=False,
+                                   normal=True, equal_var=False)
+        assert suggestions[0][1] == 't_welch'
+
+    def test_paired_ignores_equal_var(self):
+        suggestions = suggest_test('Continua', 'Categorica', 2, paired=True,
+                                   normal=True, equal_var=False)
+        assert suggestions[0][1] == 't_paired'
+
+
+# --- S2: Intervalos de confianza --------------------------------------------
+
+class TestConfidenceIntervals:
+    def test_two_groups_has_ci(self, sample_df):
+        r = run_test('t_independent', sample_df, 'valor', 'grupo', ['A', 'B'])
+        assert 'ci_lower' in r
+        assert 'ci_upper' in r
+        assert r['ci_lower'] < r['ci_upper']
+        assert 'mean_diff' in r
+
+    def test_welch_has_ci(self, sample_df):
+        r = run_test('t_welch', sample_df, 'valor', 'grupo', ['A', 'B'])
+        assert 'ci_lower' in r
+        assert 'ci_upper' in r
+
+    def test_ci_contains_mean_diff(self, sample_df):
+        r = run_test('t_independent', sample_df, 'valor', 'grupo', ['A', 'B'])
+        assert r['ci_lower'] <= r['mean_diff'] <= r['ci_upper']
+
+    def test_correlation_has_ci(self):
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'x': np.random.normal(0, 1, 50),
+            'y': np.random.normal(0, 1, 50),
+        })
+        r = run_test('pearson', df, 'x', 'y')
+        assert 'ci_lower' in r
+        assert 'ci_upper' in r
+        assert -1 <= r['ci_lower'] <= 1
+        assert -1 <= r['ci_upper'] <= 1
+
+    def test_regression_has_ci(self):
+        np.random.seed(42)
+        x = np.random.normal(0, 1, 30)
+        df = pd.DataFrame({'y': 2 * x + np.random.normal(0, 0.5, 30), 'x': x})
+        r = run_test('linear_reg', df, 'y', 'x')
+        assert 'ci_lower' in r
+        assert 'ci_upper' in r
+        # CI should contain the slope
+        assert r['ci_lower'] <= r['slope'] <= r['ci_upper']
+
+    def test_bland_altman_has_ci(self):
+        np.random.seed(42)
+        m1 = np.random.normal(100, 10, 30)
+        df = pd.DataFrame({'m1': m1, 'm2': m1 + np.random.normal(0, 2, 30)})
+        r = run_test('bland_altman', df, 'm1', 'm2')
+        assert 'ci_lower' in r
+        assert 'ci_upper' in r
+        # CI should contain the bias
+        assert r['ci_lower'] <= r['bias'] <= r['ci_upper']

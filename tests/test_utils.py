@@ -37,11 +37,10 @@ class TestInferVariableType:
         s = pd.Series(list(range(11)) * 2)
         assert infer_variable_type(s) == 'Continua'
 
-    def test_bool_column_treated_as_continuous(self):
-        """bool dtype no es object ni int, por lo que se infiere como Continua.
-        Esto es un caso edge conocido — el usuario puede corregirlo en la UI."""
+    def test_bool_column_treated_as_categorical(self):
+        """B5: bool dtype se detecta como Categorica."""
         s = pd.Series([True, False, True, False])
-        assert infer_variable_type(s) == 'Continua'
+        assert infer_variable_type(s) == 'Categorica'
 
 
 class TestValidateContinuous:
@@ -116,3 +115,15 @@ class TestValidateGroupSizes:
         ok, err, counts = validate_group_sizes(df, 'valor', 'grupo', ['A', 'B'], min_n=5)
         assert not ok
         assert "minimo requerido: 5" in err
+
+
+# --- B5: Bool inference ---
+
+class TestBoolInference:
+    def test_bool_series_is_categorical(self):
+        s = pd.Series([True, False, True, False])
+        assert infer_variable_type(s) == 'Categorica'
+
+    def test_bool_dtype_is_categorical(self):
+        s = pd.Series([True, False, True], dtype='bool')
+        assert infer_variable_type(s) == 'Categorica'

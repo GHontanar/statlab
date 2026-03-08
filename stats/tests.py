@@ -17,7 +17,20 @@ def check_normality(data, alpha=0.05):
     return stat, p
 
 
-def suggest_test(var_dep_type, var_group_type, n_groups, paired=False, normal=True):
+def check_homogeneity(groups_data):
+    """Test de Levene para homogeneidad de varianzas.
+
+    Retorna (statistic, p_value) o (None, None) si no es posible.
+    """
+    valid = [g.dropna() for g in groups_data if len(g.dropna()) >= 2]
+    if len(valid) < 2:
+        return None, None
+    stat, p = stats.levene(*valid)
+    return stat, p
+
+
+def suggest_test(var_dep_type, var_group_type, n_groups, paired=False, normal=True,
+                 equal_var=True):
     """Sugiere el test estadistico mas adecuado."""
     suggestions = []
     if var_dep_type == 'Continua' and var_group_type == 'Categorica':
@@ -25,9 +38,12 @@ def suggest_test(var_dep_type, var_group_type, n_groups, paired=False, normal=Tr
             if normal:
                 if paired:
                     suggestions.append(("T-test pareado", "t_paired"))
-                else:
+                elif equal_var:
                     suggestions.append(("T-test independiente", "t_independent"))
                     suggestions.append(("T-test Welch", "t_welch"))
+                else:
+                    suggestions.append(("T-test de Welch", "t_welch"))
+                    suggestions.append(("T-test independiente", "t_independent"))
             else:
                 if paired:
                     suggestions.append(("Wilcoxon signed-rank", "wilcoxon"))
@@ -118,6 +134,16 @@ def _run_two_groups(test_id, df, var_dep, var_group, groups, alpha, paired_id_co
     pooled_std = np.sqrt(((n1 - 1) * g1.std()**2 + (n2 - 1) * g2.std()**2) / (n1 + n2 - 2))
     if pooled_std > 0:
         result["cohens_d"] = float(abs(g1.mean() - g2.mean()) / pooled_std)
+
+    # IC 95% para la diferencia de medias
+    mean_diff = float(g1.mean() - g2.mean())
+    se_diff = np.sqrt(g1.var(ddof=1) / n1 + g2.var(ddof=1) / n2)
+    dof_welch = (g1.var(ddof=1) / n1 + g2.var(ddof=1) / n2)**2 / (
+        (g1.var(ddof=1) / n1)**2 / (n1 - 1) + (g2.var(ddof=1) / n2)**2 / (n2 - 1))
+    t_crit = stats.t.ppf(1 - alpha / 2, dof_welch)
+    result["ci_lower"] = float(mean_diff - t_crit * se_diff)
+    result["ci_upper"] = float(mean_diff + t_crit * se_diff)
+    result["mean_diff"] = mean_diff
 
     return result
 
@@ -246,6 +272,17 @@ def _run_correlation(test_id, df, var_dep, var_group, alpha):
     result["significant"] = p < alpha
     result["r_squared"] = float(stat**2)
     result["n"] = len(clean)
+
+    # IC 95% para r (transformacion z de Fisher)
+    n = len(clean)
+    if n > 3:
+        z = np.arctanh(stat)
+        se_z = 1 / np.sqrt(n - 3)
+        z_crit = stats.norm.ppf(1 - alpha / 2)
+        ci_z_lo, ci_z_hi = z - z_crit * se_z, z + z_crit * se_z
+        result["ci_lower"] = float(np.tanh(ci_z_lo))
+        result["ci_upper"] = float(np.tanh(ci_z_hi))
+
     return result
 
 
@@ -263,6 +300,13 @@ def _run_regression(df, var_dep, var_group, alpha):
     result["std_error"] = float(se)
     result["significant"] = p < alpha
     result["n"] = len(clean)
+
+    # IC 95% para la pendiente
+    n = len(clean)
+    t_crit = stats.t.ppf(1 - alpha / 2, n - 2)
+    result["ci_lower"] = float(slope - t_crit * se)
+    result["ci_upper"] = float(slope + t_crit * se)
+
     return result
 
 
@@ -312,6 +356,13 @@ def _run_bland_altman(df, var_dep, var_group):
     result["n"] = len(clean)
     result["means"] = mean.tolist()
     result["diffs"] = diff.tolist()
+
+    # IC 95% para el sesgo
+    n = len(clean)
+    se_bias = sd_diff / np.sqrt(n)
+    t_crit = stats.t.ppf(0.975, n - 1)
+    result["ci_lower"] = float(bias - t_crit * se_bias)
+    result["ci_upper"] = float(bias + t_crit * se_bias)
 
     # Test de sesgo (bias != 0)
     stat, p = stats.ttest_1samp(diff, 0)

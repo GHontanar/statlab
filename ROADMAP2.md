@@ -2,47 +2,47 @@
 
 ## Estado actual
 
-App completa con 11 tests estadisticos, 9 tipos de figura, informes PDF, 153 tests, ~90% cobertura.
+App completa con 11 tests estadisticos, 9 tipos de figura, informes PDF, 169 tests, ~90% cobertura.
 Roadmap 1 completado al 100%.
 
 ---
 
-## Prioridades
+## Completado
 
 ### Fase 1: Supuestos y confianza en resultados
 
-#### S1. Test de homogeneidad de varianzas (Levene)
+#### S1. ~~Test de homogeneidad de varianzas (Levene)~~ ✔
 Mostrar junto a normalidad. Ajustar recomendacion automatica: varianzas iguales → t-test, distintas → Welch.
 
-#### S2. Intervalos de confianza (IC 95%)
-Incluir IC en resultados, interpretacion, tablas descriptivas y PDF. Obligatorio para publicacion.
+#### S2. ~~Intervalos de confianza (IC 95%)~~ ✔
+IC en resultados, interpretacion, tablas y PDF. Cubre: diferencia de medias, correlacion (Fisher z), pendiente de regresion, sesgo Bland-Altman.
 
-#### S3. Seccion de supuestos antes de resultados
-Tabla resumen: normalidad, homogeneidad, n minimo, balance de grupos. Visible antes del p-valor.
+#### S3. ~~Seccion de supuestos antes de resultados~~ ✔
+Tabla resumen con Shapiro-Wilk por grupo (con razon si N/A), Levene, advertencias contextuales.
 
-#### S4. Tabla resumen de todos los analisis
-Dataframe comparativo con test, variables, p-valor, effect size, significancia de todos los analisis ejecutados.
-
----
+#### S4. ~~Tabla resumen de todos los analisis~~ ✔
+Dataframe comparativo con test, variables, p-valor, IC 95%, effect size. Aparece cuando hay >1 analisis.
 
 ### Fase 2: Fixes y robustez
 
-#### B5. Booleanos inferidos como Continua
-`utils/data.py` no detecta dtype `bool`. Agregar check.
+#### B5. ~~Booleanos inferidos como Continua~~ ✔
+Agregado check para dtype `bool` en `infer_variable_type` y en deteccion de app.py.
 
-#### B6. Normalidad "N/A" sin explicacion
-Cuando Shapiro devuelve None (n < 3 o n > 5000), mostrar razon en la UI.
+#### B6. ~~Normalidad "N/A" sin explicacion~~ ✔
+La tabla de supuestos (S3) muestra la razon: "n < 3" o "n > 5000".
 
-#### B7. Evento KM no se pre-valida en UI
-Filtrar selectbox de evento a variables binarias (0/1). No esperar al error en ejecucion.
+#### B7. ~~Evento KM no se pre-valida en UI~~ ✔
+Selectbox filtrado a variables binarias (0/1). Warning si no se encuentra ninguna.
 
-#### B8. Categorias case-sensitive
-Detectar y advertir cuando existen categorias que solo difieren en mayusculas/minusculas.
+#### B8. ~~Categorias case-sensitive~~ ✔
+Detecta y advierte cuando existen categorias que solo difieren en mayusculas/minusculas.
 
-#### B9. Truncacion pareada sin alternativa
-Con columna ID seleccionada, emparejar por ID y excluir no emparejados en vez de truncar por posicion.
+#### B9. ~~Truncacion pareada sin alternativa~~ ✔
+Ya implementado en Roadmap 1: empareja por ID cuando se selecciona columna ID; trunca por posicion solo como fallback.
 
 ---
+
+## Pendiente
 
 ### Fase 3: Funcionalidades estadisticas
 
@@ -91,11 +91,11 @@ Descargar la tabla resumen (S4) como .xlsx.
 
 ## Orden de implementacion sugerido
 
-1. S1 — Levene (base para recomendacion automatica)
-2. S2 — Intervalos de confianza
-3. S3 — Seccion de supuestos
-4. S4 — Tabla resumen
-5. B5-B9 — Fixes
+~~1. S1 — Levene~~ ✔
+~~2. S2 — Intervalos de confianza~~ ✔
+~~3. S3 — Seccion de supuestos~~ ✔
+~~4. S4 — Tabla resumen~~ ✔
+~~5. B5-B9 — Fixes~~ ✔
 6. F7-F9 — Nuevas funcionalidades estadisticas
 7. G9-G11, R1-R2 — Figuras y reportes
 8. U6-U8 — UX y polish

@@ -122,6 +122,9 @@ def _build_stats_table(result):
     elif sig is False:
         rows.append(['Significativo', 'No'])
 
+    if result.get('ci_lower') is not None and result.get('ci_upper') is not None:
+        rows.append(['IC 95%', f"[{result['ci_lower']:.3f}, {result['ci_upper']:.3f}]"])
+
     if result.get('cohens_d') is not None:
         d = result['cohens_d']
         rows.append(['d de Cohen', f"{d:.3f} ({_effect_label(d)})"])

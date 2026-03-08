@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 from utils.data import infer_variable_type, validate_continuous, validate_group_sizes
-from stats.tests import check_normality, suggest_test, run_test, POSTHOC_METHODS
+from stats.tests import check_normality, check_homogeneity, suggest_test, run_test, POSTHOC_METHODS
 from charts.figures import generate_figure
 from reports.text import format_result_text, generate_interpretation
 import matplotlib.pyplot as plt
@@ -289,8 +289,8 @@ if df is not None:
     _ambiguous_vars = []
     for col_name in cols:
         dtype = df[col_name].dtype
-        # Claramente categorica: string/object/category
-        if dtype in ('object', 'category'):
+        # Claramente categorica: string/object/category/bool
+        if dtype in ('object', 'category', 'bool'):
             _clear_vars.append((col_name, 'Categorica'))
         # Claramente continua: float
         elif dtype in ('float64', 'float32'):
@@ -384,6 +384,18 @@ if df is not None:
             st.stop()
 
         all_groups = sorted(df[var_group].dropna().unique())
+
+        # B8: Detectar categorias que solo difieren en mayusculas/minusculas
+        _lower_map = {}
+        for g in all_groups:
+            key = str(g).strip().lower()
+            _lower_map.setdefault(key, []).append(str(g))
+        _case_dupes = {k: v for k, v in _lower_map.items() if len(v) > 1}
+        if _case_dupes:
+            _dupe_list = ", ".join(f"{' / '.join(v)}" for v in _case_dupes.values())
+            st.warning(f"Posibles duplicados por mayusculas/minusculas: {_dupe_list}. "
+                       "Revisa los datos o unifica antes de analizar.")
+
         selected_groups = st.multiselect(
             f"Grupos a comparar (de `{var_group}`)",
             options=all_groups,
@@ -413,22 +425,55 @@ if df is not None:
             st.warning(f"Grupos muy desbalanceados (n = {_min_count} vs {_max_count}). "
                        "Los resultados pueden verse afectados por el desbalance.")
 
-        # Normalidad
-        st.subheader("Comprobacion de normalidad")
-        norm_cols = st.columns(min(n_groups, 4))
+        # S3: Seccion de supuestos
+        st.subheader("Verificacion de supuestos")
+
+        # Normalidad (Shapiro-Wilk por grupo)
         all_normal = True
-        for i, g in enumerate(selected_groups):
+        _norm_results = {}
+        for g in selected_groups:
             gdata = df[df[var_group] == g][var_dep].dropna()
             stat, p = check_normality(gdata)
             is_normal = p > 0.05 if p is not None else None
             if is_normal is False:
                 all_normal = False
-            with norm_cols[i % min(n_groups, 4)]:
-                if p is not None:
-                    emoji = "✅" if is_normal else "⚠️"
-                    st.metric(f"{g}", f"p = {p:.4f} {emoji}")
-                else:
-                    st.metric(f"{g}", "N/A")
+            _norm_results[g] = (stat, p, is_normal, len(gdata))
+
+        # S1: Homogeneidad de varianzas (Levene)
+        _group_data = [df[df[var_group] == g][var_dep].dropna() for g in selected_groups]
+        levene_stat, levene_p = check_homogeneity(_group_data)
+        equal_var = levene_p > 0.05 if levene_p is not None else True
+
+        # Tabla resumen de supuestos
+        _assumption_rows = []
+        for g in selected_groups:
+            stat, p, is_normal, n = _norm_results[g]
+            if p is not None:
+                _assumption_rows.append({
+                    'Grupo': g, 'n': n,
+                    'Shapiro-Wilk p': f"{p:.4f}",
+                    'Normal': "Si" if is_normal else "No",
+                })
+            else:
+                reason = "n < 3" if n < 3 else "n > 5000"
+                _assumption_rows.append({
+                    'Grupo': g, 'n': n,
+                    'Shapiro-Wilk p': f"N/A ({reason})",
+                    'Normal': "—",
+                })
+
+        if levene_p is not None:
+            _levene_summary = f"Levene p = {levene_p:.4f} → varianzas {'iguales' if equal_var else 'distintas'}"
+        else:
+            _levene_summary = "Levene: N/A"
+
+        st.dataframe(pd.DataFrame(_assumption_rows).set_index('Grupo'),
+                     use_container_width=True)
+        if levene_p is not None:
+            if equal_var:
+                st.success(f"**Homogeneidad de varianzas**: {_levene_summary}")
+            else:
+                st.warning(f"**Varianzas no homogeneas**: {_levene_summary}. Se recomienda Welch o test no parametrico.")
 
         # P8: Advertencia normalidad con n pequeno
         if _min_count < 20 and all_normal:
@@ -450,7 +495,7 @@ if df is not None:
                 if paired_id_col == "(orden por posicion)":
                     paired_id_col = None
 
-        suggestions = suggest_test('Continua', 'Categorica', n_groups, paired, all_normal)
+        suggestions = suggest_test('Continua', 'Categorica', n_groups, paired, all_normal, equal_var)
 
         if suggestions:
             recommended_name, recommended_id = suggestions[0]
@@ -461,7 +506,10 @@ if df is not None:
                 if paired:
                     _reason += " y son mediciones repetidas del mismo sujeto"
                 elif n_groups == 2:
-                    _reason += " y tienes 2 grupos independientes"
+                    if equal_var:
+                        _reason += ", varianzas homogeneas (Levene p > 0.05)"
+                    else:
+                        _reason += ", varianzas NO homogeneas (Levene p < 0.05) → se recomienda Welch"
                 else:
                     _reason += f" y tienes {n_groups} grupos independientes"
                 _reason += " → test parametrico."
@@ -622,8 +670,17 @@ if df is not None:
                 st.stop()
             var_dep = st.selectbox("Tiempo hasta evento", continuous_vars)
         with col_right:
+            # B7: Filtrar a variables binarias (0/1)
+            _event_candidates = []
+            for c in continuous_vars + categorical_vars:
+                _unique = df[c].dropna().unique()
+                if set(_unique).issubset({0, 1, 0.0, 1.0, True, False}):
+                    _event_candidates.append(c)
+            if not _event_candidates:
+                _event_candidates = continuous_vars + categorical_vars
+                st.warning("No se detectaron variables binarias (0/1). Revisa tus datos.")
             var_group = st.selectbox("Variable de evento (0=censurado, 1=evento)",
-                                     continuous_vars + categorical_vars)
+                                     _event_candidates)
 
         ok, err = validate_continuous(df, var_dep)
         if not ok:
@@ -710,6 +767,10 @@ if df is not None:
                 st.warning(result['warning'])
             if result.get('posthoc_error'):
                 st.warning(result['posthoc_error'])
+
+            # S2: Intervalo de confianza
+            if result.get('ci_lower') is not None and result.get('ci_upper') is not None:
+                st.info(f"IC 95%: [{result['ci_lower']:.3f}, {result['ci_upper']:.3f}]")
 
             if result.get('cohens_d'):
                 st.info(f"Tamano del efecto: d de Cohen = {result['cohens_d']:.3f}")
@@ -851,10 +912,45 @@ if df is not None:
                     use_container_width=True,
                 )
 
-    # --- PASO 5: Informe ------------------------------------------------------
-    st.header("5. Descargar informe")
-
+    # --- S4: Tabla resumen de todos los analisis --------------------------------
     valid_results = [r for r in st.session_state.results if r.get('success')]
+
+    if len(valid_results) > 1:
+        st.header("5. Resumen de analisis")
+        _summary_rows = []
+        for r in valid_results:
+            row = {
+                'Test': r.get('test_name', 'N/A'),
+                'Variable': r.get('var_dep', ''),
+                'Grupo/Predictor': r.get('var_group', ''),
+            }
+            p = r.get('p_value')
+            row['p-valor'] = f"{p:.4f}" if isinstance(p, (int, float)) else "—"
+            sig = r.get('significant')
+            row['Sig.'] = "Si" if sig is True else "No" if sig is False else "—"
+
+            if r.get('ci_lower') is not None:
+                row['IC 95%'] = f"[{r['ci_lower']:.3f}, {r['ci_upper']:.3f}]"
+            else:
+                row['IC 95%'] = "—"
+
+            if r.get('cohens_d') is not None:
+                row['Efecto'] = f"d={r['cohens_d']:.2f}"
+            elif r.get('eta_squared') is not None:
+                row['Efecto'] = f"eta2={r['eta_squared']:.3f}"
+            elif r.get('r_squared') is not None:
+                row['Efecto'] = f"R2={r['r_squared']:.3f}"
+            elif r.get('auc') is not None:
+                row['Efecto'] = f"AUC={r['auc']:.3f}"
+            else:
+                row['Efecto'] = "—"
+
+            _summary_rows.append(row)
+
+        st.dataframe(pd.DataFrame(_summary_rows), use_container_width=True, hide_index=True)
+
+    # --- PASO 6: Informe ------------------------------------------------------
+    st.header("6. Descargar informe" if len(valid_results) > 1 else "5. Descargar informe")
 
     if valid_results:
         col_dl1, col_dl2 = st.columns(2)

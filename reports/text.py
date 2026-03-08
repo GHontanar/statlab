@@ -50,6 +50,9 @@ def format_result_text(result):
         else:
             lines.append("  Significancia: ns (p >= 0.05)")
 
+    if result.get('ci_lower') is not None and result.get('ci_upper') is not None:
+        lines.append(f"  IC 95% = [{result['ci_lower']:.4f}, {result['ci_upper']:.4f}]")
+
     if result.get('cohens_d') is not None:
         d = result['cohens_d']
         lines.append(f"  d de Cohen = {d:.4f} (efecto {_effect_label(d)})")
@@ -171,6 +174,10 @@ def generate_interpretation(result):
                    f"en {var_dep} entre los grupos {g1_desc} y {g2_desc}; "
                    f"{test_name}, estadistico = {stat:.2f}, {_fmt_p(p)}")
 
+        if result.get('ci_lower') is not None:
+            txt += (f", diferencia de medias = {result.get('mean_diff', 0):.2f} "
+                    f"(IC 95%: [{result['ci_lower']:.2f}, {result['ci_upper']:.2f}])")
+
         if result.get('cohens_d') is not None:
             d = result['cohens_d']
             txt += f", d de Cohen = {d:.2f} (efecto {_effect_label(d)})"
@@ -223,14 +230,18 @@ def generate_interpretation(result):
         direction = "positiva" if r > 0 else "negativa"
         strength = "debil" if abs(r) < 0.3 else "moderada" if abs(r) < 0.7 else "fuerte"
 
+        _ci_str = ""
+        if result.get('ci_lower') is not None:
+            _ci_str = f", IC 95%: [{result['ci_lower']:.3f}, {result['ci_upper']:.3f}]"
+
         if sig:
             txt = (f"Se observo una correlacion {direction} {strength} estadisticamente "
                    f"significativa entre {var_dep} y {var_group} "
-                   f"({test_name}, r = {r:.3f}, {_fmt_p(p)}, n = {n})")
+                   f"({test_name}, r = {r:.3f}{_ci_str}, {_fmt_p(p)}, n = {n})")
         else:
             txt = (f"No se observo una correlacion estadisticamente significativa "
                    f"entre {var_dep} y {var_group} "
-                   f"({test_name}, r = {r:.3f}, {_fmt_p(p)}, n = {n})")
+                   f"({test_name}, r = {r:.3f}{_ci_str}, {_fmt_p(p)}, n = {n})")
 
         if result.get('r_squared') is not None:
             txt += f". {var_group} explica el {result['r_squared']*100:.1f}% de la varianza de {var_dep}"
@@ -246,16 +257,20 @@ def generate_interpretation(result):
         r2 = result.get('r_squared', 0)
         n = result.get('n', 0)
 
+        _ci_str = ""
+        if result.get('ci_lower') is not None:
+            _ci_str = f", IC 95%: [{result['ci_lower']:.3f}, {result['ci_upper']:.3f}]"
+
         if sig:
             txt = (f"{var_group} predice significativamente {var_dep} "
-                   f"(pendiente = {slope:.3f} +/- {se:.3f}, {_fmt_p(p)}, "
+                   f"(pendiente = {slope:.3f} +/- {se:.3f}{_ci_str}, {_fmt_p(p)}, "
                    f"R2 = {r2:.3f}, n = {n}). "
                    f"Por cada unidad de incremento en {var_group}, "
                    f"{var_dep} cambia en {slope:.3f} unidades.")
         else:
             txt = (f"No se encontro una relacion lineal significativa entre "
                    f"{var_group} y {var_dep} "
-                   f"(pendiente = {slope:.3f} +/- {se:.3f}, {_fmt_p(p)}, "
+                   f"(pendiente = {slope:.3f} +/- {se:.3f}{_ci_str}, {_fmt_p(p)}, "
                    f"R2 = {r2:.3f}, n = {n}).")
         return txt
 
@@ -282,9 +297,13 @@ def generate_interpretation(result):
         loa_u = result.get('loa_upper', 0)
         n = result.get('n', 0)
 
+        _ci_str = ""
+        if result.get('ci_lower') is not None:
+            _ci_str = f" (IC 95%: [{result['ci_lower']:.3f}, {result['ci_upper']:.3f}])"
+
         bias_sig = "estadisticamente significativo" if sig else "no significativo"
         txt = (f"El analisis de Bland-Altman (n = {n}) mostro un sesgo medio de "
-               f"{bias:.3f} (DE = {sd:.3f}) entre {var_dep} y {var_group}, "
+               f"{bias:.3f}{_ci_str} (DE = {sd:.3f}) entre {var_dep} y {var_group}, "
                f"con limites de acuerdo de [{loa_l:.3f}, {loa_u:.3f}]. "
                f"El sesgo fue {bias_sig} ({_fmt_p(p)}).")
         return txt
