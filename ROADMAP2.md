@@ -2,7 +2,7 @@
 
 ## Estado actual
 
-App completa con 11 tests estadisticos, 9 tipos de figura, informes PDF, 169 tests, ~90% cobertura.
+App completa con 14 tests estadisticos, 9 tipos de figura, informes PDF, 188 tests, ~90% cobertura.
 Roadmap 1 completado al 100%.
 
 ---
@@ -42,20 +42,20 @@ Ya implementado en Roadmap 1: empareja por ID cuando se selecciona columna ID; t
 
 ---
 
-## Pendiente
-
 ### Fase 3: Funcionalidades estadisticas
 
-#### F7. Regresion logistica
-Odds ratios, IC, p-valor por predictor. Comun en biomedicina para factores de riesgo.
+#### F7. ~~Regresion logistica~~ ✔
+OR, IC 95%, pseudo R2 (McFadden), AIC. Interpretacion con % cambio de riesgo.
 
-#### F8. Analisis de potencia / tamano muestral
-Potencia post-hoc del analisis ejecutado. Estimador de n necesario para detectar el efecto observado.
+#### F8. ~~Analisis de potencia / tamano muestral~~ ✔
+Potencia post-hoc automatica para t-test, Welch, pareado, ANOVA. n necesario para 80%.
 
-#### F9. ICC (coeficiente de correlacion intraclase)
-Para estudios de fiabilidad inter/intra-observador. Complementa Bland-Altman.
+#### F9. ~~ICC (coeficiente de correlacion intraclase)~~ ✔
+ICC(3,1) con IC 95% (basado en F). Calificacion: pobre/moderada/buena/excelente.
 
 ---
+
+## Pendiente
 
 ### Fase 4: Figuras y reportes
 
@@ -96,6 +96,6 @@ Descargar la tabla resumen (S4) como .xlsx.
 ~~3. S3 — Seccion de supuestos~~ ✔
 ~~4. S4 — Tabla resumen~~ ✔
 ~~5. B5-B9 — Fixes~~ ✔
-6. F7-F9 — Nuevas funcionalidades estadisticas
+~~6. F7-F9 — Nuevas funcionalidades estadisticas~~ ✔
 7. G9-G11, R1-R2 — Figuras y reportes
 8. U6-U8 — UX y polish

@@ -658,3 +658,181 @@ class TestConfidenceIntervals:
         assert 'ci_upper' in r
         # CI should contain the bias
         assert r['ci_lower'] <= r['bias'] <= r['ci_upper']
+
+
+# --- F7: Regresion logistica ------------------------------------------------
+
+class TestLogisticRegression:
+    @pytest.fixture
+    def logistic_df(self):
+        np.random.seed(42)
+        n = 60
+        x = np.random.normal(50, 10, n)
+        prob = 1 / (1 + np.exp(-(x - 50) / 5))
+        y = np.array(['Enfermo' if p > 0.5 else 'Sano' for p in prob])
+        return pd.DataFrame({'Desenlace': y, 'Biomarcador': x})
+
+    def test_basic_logistic(self, logistic_df):
+        r = run_test('logistic', logistic_df, 'Desenlace', 'Biomarcador')
+        assert r['success']
+        assert r['test_name'] == 'Regresion logistica'
+        assert 'odds_ratio' in r
+        assert 'or_ci_lower' in r
+        assert 'or_ci_upper' in r
+        assert r['odds_ratio'] > 0
+        assert r['or_ci_lower'] < r['odds_ratio'] < r['or_ci_upper']
+
+    def test_logistic_has_pseudo_r2(self, logistic_df):
+        r = run_test('logistic', logistic_df, 'Desenlace', 'Biomarcador')
+        assert 'pseudo_r2' in r
+        assert 0 <= r['pseudo_r2'] <= 1
+
+    def test_logistic_has_aic(self, logistic_df):
+        r = run_test('logistic', logistic_df, 'Desenlace', 'Biomarcador')
+        assert 'aic' in r
+        assert r['aic'] > 0
+
+    def test_logistic_non_binary_fails(self):
+        df = pd.DataFrame({
+            'y': ['A', 'B', 'C'] * 10,
+            'x': np.random.normal(0, 1, 30),
+        })
+        r = run_test('logistic', df, 'y', 'x')
+        assert not r['success']
+        assert '2 categorias' in r['error']
+
+    def test_logistic_p_value(self, logistic_df):
+        r = run_test('logistic', logistic_df, 'Desenlace', 'Biomarcador')
+        assert isinstance(r['p_value'], float)
+        assert 0 <= r['p_value'] <= 1
+
+
+# --- F8: Potencia post-hoc -------------------------------------------------
+
+class TestPowerAnalysis:
+    def test_ttest_has_power(self, sample_df):
+        r = run_test('t_independent', sample_df, 'valor', 'grupo', ['A', 'B'])
+        assert r['success']
+        assert 'power' in r
+        assert 0 < r['power']['power'] <= 1
+        assert r['power']['n_for_80'] > 0
+
+    def test_welch_has_power(self, sample_df):
+        r = run_test('t_welch', sample_df, 'valor', 'grupo', ['A', 'B'])
+        assert 'power' in r
+
+    def test_high_effect_high_power(self):
+        """Un efecto grande con n grande debe dar potencia alta."""
+        np.random.seed(42)
+        n = 50
+        df = pd.DataFrame({
+            'valor': np.concatenate([
+                np.random.normal(0, 1, n),
+                np.random.normal(3, 1, n),  # d = 3, efecto enorme
+            ]),
+            'grupo': ['A'] * n + ['B'] * n,
+        })
+        r = run_test('t_independent', df, 'valor', 'grupo', ['A', 'B'])
+        assert r['power']['power'] > 0.99
+
+    def test_small_effect_needs_more_n(self):
+        """Un efecto pequeno con n pequeno debe necesitar mas sujetos."""
+        np.random.seed(42)
+        n = 10
+        df = pd.DataFrame({
+            'valor': np.concatenate([
+                np.random.normal(0, 1, n),
+                np.random.normal(0.3, 1, n),  # d = 0.3, efecto pequeno
+            ]),
+            'grupo': ['A'] * n + ['B'] * n,
+        })
+        r = run_test('t_independent', df, 'valor', 'grupo', ['A', 'B'])
+        if r.get('power'):
+            assert r['power']['n_for_80'] > n
+
+
+# --- F9: ICC ----------------------------------------------------------------
+
+class TestICC:
+    @pytest.fixture
+    def icc_df(self):
+        """2 evaluadores, 10 sujetos, alta concordancia."""
+        np.random.seed(42)
+        n = 10
+        true_scores = np.random.normal(50, 10, n)
+        return pd.DataFrame({
+            'medicion': np.concatenate([
+                true_scores + np.random.normal(0, 1, n),
+                true_scores + np.random.normal(0, 1, n),
+            ]),
+            'evaluador': ['A'] * n + ['B'] * n,
+        })
+
+    def test_basic_icc(self, icc_df):
+        r = run_test('icc', icc_df, 'medicion', 'evaluador')
+        assert r['success']
+        assert r['test_name'] == 'ICC'
+        assert 'icc' in r
+        assert 0 <= r['icc'] <= 1
+        assert r['icc'] > 0.8  # alta concordancia esperada
+
+    def test_icc_has_ci(self, icc_df):
+        r = run_test('icc', icc_df, 'medicion', 'evaluador')
+        assert 'ci_lower' in r
+        assert 'ci_upper' in r
+        assert r['ci_lower'] < r['icc']
+
+    def test_icc_quality_labels(self, icc_df):
+        r = run_test('icc', icc_df, 'medicion', 'evaluador')
+        assert r['quality'] in ('pobre', 'moderada', 'buena', 'excelente')
+
+    def test_icc_poor_agreement(self):
+        """Evaluadores completamente discordantes → ICC bajo."""
+        np.random.seed(42)
+        n = 10
+        df = pd.DataFrame({
+            'medicion': np.concatenate([
+                np.random.normal(50, 10, n),
+                np.random.normal(50, 10, n),  # independientes
+            ]),
+            'evaluador': ['A'] * n + ['B'] * n,
+        })
+        r = run_test('icc', df, 'medicion', 'evaluador')
+        assert r['success']
+        assert r['icc'] < 0.5  # baja concordancia
+
+    def test_icc_unbalanced_fails(self):
+        """Datos no balanceados deben fallar."""
+        df = pd.DataFrame({
+            'medicion': [1, 2, 3, 4, 5],
+            'evaluador': ['A', 'A', 'A', 'B', 'B'],
+        })
+        r = run_test('icc', df, 'medicion', 'evaluador')
+        assert not r['success']
+        assert 'balanceados' in r['error']
+
+    def test_icc_single_rater_fails(self):
+        df = pd.DataFrame({
+            'medicion': [1, 2, 3],
+            'evaluador': ['A', 'A', 'A'],
+        })
+        r = run_test('icc', df, 'medicion', 'evaluador')
+        assert not r['success']
+        assert '2 evaluadores' in r['error']
+
+    def test_icc_three_raters(self):
+        np.random.seed(42)
+        n = 10
+        true_scores = np.random.normal(50, 10, n)
+        df = pd.DataFrame({
+            'medicion': np.concatenate([
+                true_scores + np.random.normal(0, 1, n),
+                true_scores + np.random.normal(0, 1, n),
+                true_scores + np.random.normal(0, 1, n),
+            ]),
+            'evaluador': ['A'] * n + ['B'] * n + ['C'] * n,
+        })
+        r = run_test('icc', df, 'medicion', 'evaluador')
+        assert r['success']
+        assert r['n_raters'] == 3
+        assert r['n_subjects'] == 10

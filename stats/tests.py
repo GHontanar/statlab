@@ -496,6 +496,194 @@ def _run_kaplan_meier(df, var_dep, var_group, group_col=None, groups=None, alpha
     return result
 
 
+def _run_logistic(df, var_dep, var_group, alpha=0.05):
+    """F7: Regresion logistica simple."""
+    import statsmodels.api as sm
+
+    result = {}
+    clean = df[[var_dep, var_group]].dropna()
+
+    labels = sorted(clean[var_dep].unique())
+    if len(labels) != 2:
+        raise ValueError(f"La variable '{var_dep}' debe tener exactamente 2 categorias, "
+                         f"tiene {len(labels)}: {labels}")
+
+    y = (clean[var_dep] == labels[1]).astype(int).values
+    X = sm.add_constant(clean[var_group].values.astype(float))
+
+    model = sm.Logit(y, X).fit(disp=0)
+
+    result["test_name"] = "Regresion logistica"
+    result["n"] = len(clean)
+    result["positive_label"] = str(labels[1])
+
+    # Coeficientes (intercepto + predictor)
+    coef = float(model.params[1])
+    se = float(model.bse[1])
+    p = float(model.pvalues[1])
+    with np.errstate(over='ignore'):
+        or_val = float(np.exp(coef))
+        or_ci_lower = float(np.exp(coef - stats.norm.ppf(1 - alpha / 2) * se))
+        or_ci_upper = float(np.exp(coef + stats.norm.ppf(1 - alpha / 2) * se))
+
+    result["statistic"] = coef
+    result["p_value"] = p
+    result["significant"] = p < alpha
+    result["odds_ratio"] = or_val
+    result["or_ci_lower"] = or_ci_lower
+    result["or_ci_upper"] = or_ci_upper
+    result["ci_lower"] = or_ci_lower
+    result["ci_upper"] = or_ci_upper
+    result["coef"] = coef
+    result["std_error"] = se
+
+    # Pseudo R2 (McFadden)
+    result["pseudo_r2"] = float(model.prsquared)
+
+    # AIC
+    result["aic"] = float(model.aic)
+
+    return result
+
+
+def _run_power(result):
+    """F8: Calculo de potencia post-hoc basado en el resultado de un test."""
+    from statsmodels.stats.power import TTestIndPower, TTestPower, FTestAnovaPower
+
+    test_id = result.get('test', '')
+    power_info = {}
+
+    if test_id in ('t_independent', 't_welch', 'mann_whitney'):
+        d = result.get('cohens_d')
+        ns = result.get('n', [])
+        if d and len(ns) >= 2 and min(ns) >= 2:
+            analysis = TTestIndPower()
+            n_avg = sum(ns) / len(ns)
+            ratio = ns[1] / ns[0] if ns[0] > 0 else 1
+            power = analysis.power(effect_size=d, nobs1=ns[0], ratio=ratio,
+                                   alpha=result.get('alpha', 0.05))
+            power_info["power"] = float(power)
+            # n necesario para 80% de potencia
+            n_needed = analysis.solve_power(effect_size=d, power=0.8,
+                                            ratio=ratio,
+                                            alpha=result.get('alpha', 0.05))
+            power_info["n_for_80"] = int(np.ceil(n_needed))
+
+    elif test_id in ('t_paired', 'wilcoxon'):
+        d = result.get('cohens_d')
+        ns = result.get('n', [])
+        if d and len(ns) >= 2 and min(ns) >= 2:
+            analysis = TTestPower()
+            n_used = min(ns)
+            power = analysis.power(effect_size=d, nobs=n_used,
+                                   alpha=result.get('alpha', 0.05))
+            power_info["power"] = float(power)
+            n_needed = analysis.solve_power(effect_size=d, power=0.8,
+                                            alpha=result.get('alpha', 0.05))
+            power_info["n_for_80"] = int(np.ceil(n_needed))
+
+    elif test_id == 'anova':
+        eta2 = result.get('eta_squared')
+        ns = result.get('n', [])
+        k = len(ns)
+        if eta2 and eta2 < 1 and k >= 2:
+            f_effect = np.sqrt(eta2 / (1 - eta2))
+            n_avg = sum(ns) / k
+            analysis = FTestAnovaPower()
+            power = analysis.power(effect_size=f_effect, nobs=n_avg,
+                                   k_groups=k,
+                                   alpha=result.get('alpha', 0.05))
+            power_info["power"] = float(power)
+            n_needed = analysis.solve_power(effect_size=f_effect, power=0.8,
+                                            k_groups=k,
+                                            alpha=result.get('alpha', 0.05))
+            power_info["n_for_80"] = int(np.ceil(n_needed))
+
+    return power_info if power_info else None
+
+
+def _run_icc(df, var_dep, var_group, alpha=0.05):
+    """F9: Coeficiente de correlacion intraclase (ICC).
+
+    Calcula ICC(3,1) — two-way mixed, single measures, consistency.
+    var_dep = medicion, var_group = evaluador/metodo.
+    Requiere una columna de sujeto (extra['subject_col']).
+    """
+    result = {}
+    result["test_name"] = "ICC"
+
+    clean = df.dropna(subset=[var_dep, var_group])
+    raters = sorted(clean[var_group].unique())
+    k = len(raters)
+
+    if k < 2:
+        raise ValueError("Se necesitan al menos 2 evaluadores/metodos para calcular ICC.")
+
+    # Pivotar: filas = sujetos, columnas = evaluadores
+    # Necesitamos un sujeto implícito: asumimos filas balanceadas
+    n_per_rater = [len(clean[clean[var_group] == r]) for r in raters]
+    if len(set(n_per_rater)) != 1:
+        raise ValueError(f"Datos no balanceados: cada evaluador debe tener el mismo n. "
+                         f"Encontrados: {dict(zip(raters, n_per_rater))}")
+
+    n = n_per_rater[0]  # sujetos por evaluador
+    # Construir matriz: cada columna = un evaluador
+    matrix = np.column_stack([
+        clean[clean[var_group] == r][var_dep].values for r in raters
+    ])
+
+    grand_mean = matrix.mean()
+    row_means = matrix.mean(axis=1)
+    col_means = matrix.mean(axis=0)
+
+    # Sumas de cuadrados
+    ss_total = ((matrix - grand_mean) ** 2).sum()
+    ss_rows = k * ((row_means - grand_mean) ** 2).sum()  # Between subjects
+    ss_cols = n * ((col_means - grand_mean) ** 2).sum()  # Between raters
+    ss_error = ss_total - ss_rows - ss_cols
+
+    # Mean squares
+    ms_rows = ss_rows / (n - 1)
+    ms_cols = ss_cols / (k - 1) if k > 1 else 0
+    ms_error = ss_error / ((n - 1) * (k - 1)) if (n - 1) * (k - 1) > 0 else 0
+
+    # ICC(3,1) — two-way mixed, consistency, single measures
+    icc = (ms_rows - ms_error) / (ms_rows + (k - 1) * ms_error) if (ms_rows + (k - 1) * ms_error) > 0 else 0
+
+    # IC 95% para ICC (basado en F)
+    f_value = ms_rows / ms_error if ms_error > 0 else 0
+    df1 = n - 1
+    df2 = (n - 1) * (k - 1)
+
+    if f_value > 0 and df1 > 0 and df2 > 0:
+        f_lo = stats.f.ppf(alpha / 2, df1, df2)
+        f_hi = stats.f.ppf(1 - alpha / 2, df1, df2)
+        ci_lower = (f_value / f_hi - 1) / (f_value / f_hi + k - 1) if f_hi > 0 else 0
+        ci_upper = (f_value / f_lo - 1) / (f_value / f_lo + k - 1) if f_lo > 0 else 1
+        result["ci_lower"] = float(max(0, ci_lower))
+        result["ci_upper"] = float(min(1, ci_upper))
+
+    result["statistic"] = float(icc)
+    result["icc"] = float(icc)
+    result["n_subjects"] = n
+    result["n_raters"] = k
+    result["raters"] = [str(r) for r in raters]
+    result["p_value"] = None
+    result["significant"] = None
+
+    # Calificacion
+    if icc < 0.5:
+        result["quality"] = "pobre"
+    elif icc < 0.75:
+        result["quality"] = "moderada"
+    elif icc < 0.9:
+        result["quality"] = "buena"
+    else:
+        result["quality"] = "excelente"
+
+    return result
+
+
 def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05, paired_id_col=None,
              extra=None):
     """Ejecuta el test estadistico seleccionado."""
@@ -526,8 +714,20 @@ def run_test(test_id, df, var_dep, var_group, groups=None, alpha=0.05, paired_id
             result.update(_run_kaplan_meier(df, var_dep, var_group,
                                            group_col=group_col, groups=km_groups,
                                            alpha=alpha))
+        elif test_id == 'logistic':
+            result.update(_run_logistic(df, var_dep, var_group, alpha))
+        elif test_id == 'icc':
+            result.update(_run_icc(df, var_dep, var_group, alpha))
 
         result["success"] = True
+
+        # F8: Potencia post-hoc (si aplica)
+        try:
+            power_info = _run_power(result)
+            if power_info:
+                result["power"] = power_info
+        except Exception:
+            pass  # Potencia es informativa, no bloquea el resultado
     except Exception as e:
         result["success"] = False
         result["error"] = str(e)

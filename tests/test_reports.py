@@ -338,6 +338,40 @@ class TestGenerateInterpretation:
         assert 'supervivencia' in txt
         assert 'Global' in txt
 
+    def test_logistic_regression(self):
+        r = {'test': 'logistic', 'test_name': 'Regresion logistica',
+             'var_dep': 'Diabetes', 'var_group': 'IMC',
+             'odds_ratio': 1.15, 'or_ci_lower': 1.05, 'or_ci_upper': 1.27,
+             'positive_label': 'Si',
+             'p_value': 0.003, 'significant': True,
+             'statistic': 0.14, 'n': 100, 'pseudo_r2': 0.12}
+        txt = generate_interpretation(r)
+        assert 'predictor significativo' in txt
+        assert 'OR = 1.15' in txt
+        assert 'riesgo aumenta' in txt
+
+    def test_logistic_not_significant(self):
+        r = {'test': 'logistic', 'test_name': 'Regresion logistica',
+             'var_dep': 'Diabetes', 'var_group': 'Altura',
+             'odds_ratio': 1.01, 'or_ci_lower': 0.95, 'or_ci_upper': 1.08,
+             'positive_label': 'Si',
+             'p_value': 0.65, 'significant': False,
+             'statistic': 0.01, 'n': 100}
+        txt = generate_interpretation(r)
+        assert 'no fue un predictor significativo' in txt
+
+    def test_icc_interpretation(self):
+        r = {'test': 'icc', 'test_name': 'ICC',
+             'var_dep': 'Score', 'var_group': 'Evaluador',
+             'icc': 0.85, 'quality': 'buena',
+             'ci_lower': 0.70, 'ci_upper': 0.93,
+             'n_subjects': 20, 'n_raters': 2,
+             'statistic': 0.85, 'p_value': None, 'significant': None}
+        txt = generate_interpretation(r)
+        assert 'fiabilidad buena' in txt
+        assert 'ICC' in txt
+        assert '0.850' in txt
+
     def test_unknown_test_returns_empty(self):
         r = {'test': 'unknown_test'}
         txt = generate_interpretation(r)

@@ -90,10 +90,30 @@ def format_result_text(result):
         if result.get('logrank_name'):
             lines.append(f"  {result['logrank_name']}")
 
+    if result.get('odds_ratio') is not None:
+        or_val = result['odds_ratio']
+        lines.append(f"  Odds Ratio = {or_val:.4f}")
+        lines.append(f"  OR IC 95% = [{result.get('or_ci_lower', 0):.4f}, {result.get('or_ci_upper', 0):.4f}]")
+        if result.get('pseudo_r2') is not None:
+            lines.append(f"  Pseudo R2 (McFadden) = {result['pseudo_r2']:.4f}")
+        if result.get('aic') is not None:
+            lines.append(f"  AIC = {result['aic']:.2f}")
+
+    if result.get('icc') is not None:
+        lines.append(f"  ICC = {result['icc']:.4f} ({result.get('quality', '')})")
+        lines.append(f"  Evaluadores = {result.get('n_raters', 0)}")
+        lines.append(f"  Sujetos = {result.get('n_subjects', 0)}")
+
     if result.get('posthoc'):
         lines.append(f"\n  POST-HOC ({result.get('posthoc_name', 'N/A')}):")
         ph = pd.DataFrame(result['posthoc'])
         lines.append(f"  {ph.to_string()}")
+
+    if result.get('power'):
+        pw = result['power']
+        lines.append(f"  Potencia = {pw['power']*100:.1f}%")
+        if pw.get('n_for_80'):
+            lines.append(f"  n por grupo para 80% potencia = {pw['n_for_80']}")
 
     lines.append("")
     sig = result.get('significant', None)
@@ -349,6 +369,46 @@ def generate_interpretation(result):
                         f"significativas entre los grupos (estadistico = {result.get('statistic', 0):.2f}, "
                         f"{_fmt_p(p)})")
         txt += "."
+        return txt
+
+    # --- Regresion logistica ---
+    if test_id == 'logistic':
+        n = result.get('n', 0)
+        or_val = result.get('odds_ratio', 0)
+        or_ci_lo = result.get('or_ci_lower', 0)
+        or_ci_hi = result.get('or_ci_upper', 0)
+        pos_label = result.get('positive_label', '')
+
+        if sig:
+            txt = (f"{var_group} fue un predictor significativo de {var_dep} = {pos_label} "
+                   f"(OR = {or_val:.2f}, IC 95%: [{or_ci_lo:.2f}, {or_ci_hi:.2f}], "
+                   f"{_fmt_p(p)}, n = {n})")
+        else:
+            txt = (f"{var_group} no fue un predictor significativo de {var_dep} = {pos_label} "
+                   f"(OR = {or_val:.2f}, IC 95%: [{or_ci_lo:.2f}, {or_ci_hi:.2f}], "
+                   f"{_fmt_p(p)}, n = {n})")
+
+        if or_val > 1:
+            txt += f". Por cada unidad de incremento en {var_group}, el riesgo aumenta {(or_val - 1) * 100:.0f}%"
+        elif or_val < 1:
+            txt += f". Por cada unidad de incremento en {var_group}, el riesgo disminuye {(1 - or_val) * 100:.0f}%"
+        txt += "."
+        return txt
+
+    # --- ICC ---
+    if test_id == 'icc':
+        icc = result.get('icc', 0)
+        quality = result.get('quality', '')
+        n_subj = result.get('n_subjects', 0)
+        n_raters = result.get('n_raters', 0)
+
+        _ci_str = ""
+        if result.get('ci_lower') is not None:
+            _ci_str = f", IC 95%: [{result['ci_lower']:.3f}, {result['ci_upper']:.3f}]"
+
+        txt = (f"El coeficiente de correlacion intraclase (ICC) fue {icc:.3f}{_ci_str}, "
+               f"indicando una fiabilidad {quality} entre {n_raters} evaluadores "
+               f"({n_subj} sujetos).")
         return txt
 
     return ""

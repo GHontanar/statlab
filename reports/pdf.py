@@ -151,6 +151,22 @@ def _build_stats_table(result):
         rows.append(['Limites de acuerdo',
                       f"[{result['loa_lower']:.3f}, {result['loa_upper']:.3f}]"])
 
+    if result.get('odds_ratio') is not None:
+        or_val = result['odds_ratio']
+        rows.append(['Odds Ratio', f"{or_val:.3f} [{result.get('or_ci_lower', 0):.3f}, {result.get('or_ci_upper', 0):.3f}]"])
+        if result.get('pseudo_r2') is not None:
+            rows.append(['Pseudo R2', f"{result['pseudo_r2']:.3f}"])
+
+    if result.get('icc') is not None:
+        rows.append(['ICC', f"{result['icc']:.3f} ({result.get('quality', '')})"])
+        rows.append(['Evaluadores', f"{result.get('n_raters', 0)}"])
+
+    if result.get('power'):
+        pw = result['power']
+        rows.append(['Potencia', f"{pw['power']*100:.0f}%"])
+        if pw.get('n_for_80'):
+            rows.append(['n para 80%', str(pw['n_for_80'])])
+
     if not rows:
         return None
 

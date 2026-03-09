@@ -25,6 +25,8 @@ Q_ASSOCIATION = "Se asocian dos categorias?"
 Q_AGREEMENT = "Dos metodos miden lo mismo?"
 Q_PREDICTION = "Un valor predice un desenlace?"
 Q_SURVIVAL = "Cuanto tiempo hasta un evento?"
+Q_RISK = "Un factor aumenta el riesgo?"
+Q_RELIABILITY = "Las mediciones son reproducibles?"
 
 
 def _close_figures():
@@ -186,6 +188,37 @@ evento no haya ocurrido en funcion del tiempo.
 - **Log-rank test**: compara curvas entre 2 grupos
 
 *Ejemplo: Tiempo hasta recaida en pacientes con dos tratamientos.*
+""")
+
+    with st.expander("Regresion logistica"):
+        st.markdown("""
+Evalua si un **factor continuo** aumenta o disminuye el riesgo
+de un **desenlace binario**.
+
+| Metrica | Descripcion |
+|---------|------------|
+| OR (Odds Ratio) | >1 = mas riesgo, <1 = menos riesgo, =1 sin efecto |
+| IC 95% del OR | Si incluye 1, el efecto no es significativo |
+| Pseudo R2 | Proporcion de varianza explicada (McFadden) |
+
+*Ejemplo: ¿La edad aumenta el riesgo de diabetes (si/no)?*
+""")
+
+    with st.expander("ICC (fiabilidad)"):
+        st.markdown("""
+El **coeficiente de correlacion intraclase** mide la concordancia
+entre evaluadores o metodos de medicion repetidos.
+
+| ICC | Interpretacion |
+|-----|---------------|
+| < 0.50 | Pobre |
+| 0.50 - 0.75 | Moderada |
+| 0.75 - 0.90 | Buena |
+| > 0.90 | Excelente |
+
+Datos deben estar **balanceados**: mismo n de sujetos por evaluador.
+
+*Ejemplo: Dos radiologos miden el tamano de un tumor en 20 pacientes.*
 """)
 
     with st.expander("Tamano del efecto"):
@@ -350,7 +383,8 @@ if df is not None:
     analysis_type = st.radio(
         "Que quieres averiguar?",
         [Q_DIFF_GROUPS, Q_CORRELATION, Q_ASSOCIATION,
-         Q_AGREEMENT, Q_PREDICTION, Q_SURVIVAL],
+         Q_AGREEMENT, Q_PREDICTION, Q_SURVIVAL,
+         Q_RISK, Q_RELIABILITY],
         horizontal=True,
         help="Elige la pregunta que mejor describe tu objetivo de investigacion."
     )
@@ -706,6 +740,63 @@ if df is not None:
         selected_groups = None
         selected_test_id = 'kaplan_meier'
 
+    elif analysis_type == Q_RISK:
+        st.info("Regresion logistica: evalua si un predictor continuo aumenta el riesgo de un desenlace binario.")
+        with col_left:
+            if not categorical_vars:
+                st.warning("Necesitas una variable categorica binaria (desenlace)")
+                st.stop()
+            var_dep = st.selectbox("Variable de desenlace (binaria)", categorical_vars,
+                                   help="La variable que quieres predecir: enfermedad si/no, muerte si/no...")
+        with col_right:
+            if not continuous_vars:
+                st.warning("Necesitas una variable continua (predictor)")
+                st.stop()
+            var_group = st.selectbox("Variable predictora (factor de riesgo)", continuous_vars,
+                                     help="El factor que crees que puede aumentar el riesgo: edad, IMC, dosis...")
+
+        n_cats = df[var_dep].dropna().nunique()
+        if n_cats != 2:
+            st.error(f"La variable '{var_dep}' debe tener exactamente 2 categorias, tiene {n_cats}.")
+            st.stop()
+
+        ok, err = validate_continuous(df, var_group)
+        if not ok:
+            st.error(err)
+            st.stop()
+
+        selected_groups = None
+        selected_test_id = 'logistic'
+
+    elif analysis_type == Q_RELIABILITY:
+        st.info("ICC: evalua reproducibilidad entre evaluadores o metodos. "
+                "Necesitas una variable de medicion y una variable que identifique al evaluador/metodo.")
+        with col_left:
+            if not continuous_vars:
+                st.warning("Necesitas una variable continua (medicion)")
+                st.stop()
+            var_dep = st.selectbox("Variable de medicion", continuous_vars,
+                                   help="Lo que se midio: score, longitud, concentracion...")
+        with col_right:
+            if not categorical_vars:
+                st.warning("Necesitas una variable categorica (evaluador/metodo)")
+                st.stop()
+            var_group = st.selectbox("Evaluador / metodo", categorical_vars,
+                                     help="Quien o que hizo la medicion: observador A/B, metodo 1/2...")
+
+        ok, err = validate_continuous(df, var_dep)
+        if not ok:
+            st.error(err)
+            st.stop()
+
+        n_raters = df[var_group].dropna().nunique()
+        if n_raters < 2:
+            st.error(f"Se necesitan al menos 2 evaluadores/metodos. '{var_group}' tiene {n_raters}.")
+            st.stop()
+
+        selected_groups = None
+        selected_test_id = 'icc'
+
     # Alpha
     alpha = st.slider("Nivel de significancia (alpha)", 0.001, 0.10, 0.05, 0.005,
                       help="Usualmente 0.05. Valores menores (0.01) son mas exigentes. Solo cambia esto si sabes por que.")
@@ -794,6 +885,35 @@ if df is not None:
                         med_str = f"{med:.1f}" if med is not None else "no alcanzada"
                         st.markdown(f"**{label}**: n={data['n']}, mediana={med_str}")
 
+            # F7: Regresion logistica
+            if result.get('odds_ratio') is not None:
+                or_val = result['odds_ratio']
+                st.info(f"Odds Ratio = {or_val:.3f} "
+                        f"(IC 95%: [{result['or_ci_lower']:.3f}, {result['or_ci_upper']:.3f}])")
+                if result.get('pseudo_r2') is not None:
+                    st.info(f"Pseudo R2 (McFadden) = {result['pseudo_r2']:.3f}")
+
+            # F9: ICC
+            if result.get('icc') is not None:
+                st.info(f"ICC = {result['icc']:.3f} ({result.get('quality', '')}), "
+                        f"{result.get('n_raters', 0)} evaluadores, "
+                        f"{result.get('n_subjects', 0)} sujetos")
+
+            # F8: Potencia post-hoc
+            if result.get('power'):
+                pw = result['power']
+                power_pct = pw['power'] * 100
+                _pw_color = "success" if pw['power'] >= 0.8 else "warning" if pw['power'] >= 0.5 else "error"
+                if _pw_color == "success":
+                    st.success(f"Potencia estadistica: {power_pct:.0f}% (adecuada). "
+                               f"n por grupo para 80%: {pw.get('n_for_80', '—')}")
+                elif _pw_color == "warning":
+                    st.warning(f"Potencia estadistica: {power_pct:.0f}% (baja). "
+                               f"n por grupo para 80%: {pw.get('n_for_80', '—')}")
+                else:
+                    st.error(f"Potencia estadistica: {power_pct:.0f}% (insuficiente). "
+                             f"n por grupo para 80%: {pw.get('n_for_80', '—')}")
+
             # P1: Interpretacion en lenguaje natural
             interpretation = generate_interpretation(result)
             if interpretation:
@@ -808,6 +928,8 @@ if df is not None:
                 Q_AGREEMENT: "bland_altman",
                 Q_PREDICTION: "roc",
                 Q_SURVIVAL: "kaplan_meier",
+                Q_RISK: None,
+                Q_RELIABILITY: None,
             }
             _auto_fig_type = _auto_fig_map.get(analysis_type)
             if _auto_fig_type:
