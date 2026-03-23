@@ -29,16 +29,6 @@ st.set_page_config(
 st.markdown("""
 <style>
     .block-container { padding-top: 2rem; }
-    .stMetric { background: #f8f9fa; padding: 1rem; border-radius: 8px; }
-    h1 { color: #1a365d; }
-    h2, h3 { color: #2c5282; }
-    .result-box {
-        background: #f0f7ff;
-        border-left: 4px solid #3182ce;
-        padding: 1rem;
-        border-radius: 4px;
-        margin: 0.5rem 0;
-    }
     .sig-yes { color: #e53e3e; font-weight: bold; }
     .sig-no { color: #38a169; font-weight: bold; }
 </style>
