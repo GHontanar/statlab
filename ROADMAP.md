@@ -2,98 +2,123 @@
 
 ## Estado actual
 
-App modular basada en Streamlit para analisis estadistico y generacion de figuras.
-Estructura en capas: `stats/`, `charts/`, `reports/`, `utils/`, con 153 tests y ~90% de cobertura.
+App refactorizada en paquete `ui/` (11 modulos) con 230 tests.
+14 tests estadisticos, figuras interactivas Plotly, informes PDF, calculadora de tamano muestral.
+Despliegue: Streamlit Cloud / HuggingFace / LXC Proxmox.
 
 ---
 
 ## Completado
 
-### B1. ~~`except:` desnudos silencian errores~~ ✔
-### B2. ~~Datos pareados truncados sin aviso~~ ✔
-### B3. ~~Cohen's d incorrecto para muestras desiguales~~ ✔
-### B4. ~~`warnings.filterwarnings('ignore')` global~~ ✔
-### A1. ~~Separar en modulos~~ ✔
-### A2. ~~Tests unitarios~~ ✔
-153 tests con pytest. Cobertura ~90%.
-### A3. ~~Validacion de entrada~~ ✔
-validate_continuous (tipo numerico, NaN), validate_group_sizes (n minimo por grupo).
-### G1. ~~Resolucion y formato de exportacion~~ ✔
-### G2. ~~Contexto de seaborn~~ ✔
-### G3. ~~Tamano de figura adaptativo~~ ✔
-### G4. ~~Brackets de significancia~~ ✔
-### G5. ~~Puntos individuales visibles~~ ✔
-### G6. ~~Contraste y visibilidad~~ ✔
-### G7. ~~Fuente profesional~~ ✔
-### F5. ~~Exportar figuras en SVG~~ ✔
-### U1. ~~Boton para limpiar historial~~ ✔
-### U2. ~~Tabla de contingencia visual~~ ✔
-### U3. ~~Selector de columna ID para datos pareados~~ ✔
-### U4. ~~Indicador de progreso PDF~~ ✔
-### U5. ~~Datos de ejemplo sin subir archivo~~ ✔
-### ~~Guia de tests en sidebar~~ ✔
+### Arquitectura y calidad (Roadmap 1)
+
+- **A1.** Separar en modulos (`stats/`, `charts/`, `reports/`, `utils/`) ✔
+- **A2.** Tests unitarios (230 tests, ~90% cobertura) ✔
+- **A3.** Validacion de entrada ✔
+
+### Bugs y robustez (Roadmaps 1-2)
+
+- **B1.** `except:` desnudos silencian errores ✔
+- **B2.** Datos pareados truncados sin aviso ✔
+- **B3.** Cohen's d incorrecto para muestras desiguales ✔
+- **B4.** `warnings.filterwarnings('ignore')` global ✔
+- **B5.** Booleanos inferidos como Continua ✔
+- **B6.** Normalidad "N/A" sin explicacion ✔
+- **B7.** Evento KM no se pre-valida en UI ✔
+- **B8.** Categorias case-sensitive ✔
+- **B9.** Truncacion pareada sin alternativa ✔
+
+### Supuestos y confianza (Roadmap 2)
+
+- **S1.** Test de homogeneidad de varianzas (Levene) ✔
+- **S2.** Intervalos de confianza (IC 95%) ✔
+- **S3.** Seccion de supuestos antes de resultados ✔
+- **S4.** Tabla resumen de todos los analisis ✔
+
+### Funcionalidades estadisticas (Roadmaps 1-2)
+
+- **F1.** Kaplan-Meier (survival) ✔
+- **F2.** Bland-Altman ✔
+- **F3.** Curvas ROC ✔
+- **F4.** Informe PDF mejorado (ReportLab) ✔
+- **F5.** Exportar figuras en SVG ✔
+- **F6.** Multiples comparaciones avanzadas ✔
+- **F7.** Regresion logistica ✔
+- **F8.** Analisis de potencia / tamano muestral ✔
+- **F9.** ICC (coeficiente de correlacion intraclase) ✔
+
+### Figuras (Roadmaps 1-3)
+
+- **G1-G7.** Resolucion, contexto, tamano adaptativo, brackets, puntos, contraste, fuente ✔
+- **G8.** Personalizacion de figuras por el usuario ✔
+- **PL1-PL7.** Migracion completa a Plotly (boxplot, violin, scatter, Bland-Altman, ROC, KM, barras/histograma/paired) ✔
+
+### UX y paper-friendly (Roadmap 1)
+
+- **P1.** Interpretacion en lenguaje natural ✔
+- **P2.** Preguntas en vez de jerga ✔
+- **P3.** Etiquetas sin jerga estadistica ✔
+- **P4.** Preseleccion automatica del test ✔
+- **P5.** Figura automatica con el resultado ✔
+- **P6.** Tabla descriptiva visible ✔
+- **P7.** Simplificar definicion de variables ✔
+- **P8.** Advertencias contextuales ✔
+- **U1.** Boton para limpiar historial ✔
+- **U2.** Tabla de contingencia visual ✔
+- **U3.** Selector de columna ID para datos pareados ✔
+- **U4.** Indicador de progreso PDF ✔
+- **U5.** Datos de ejemplo sin subir archivo ✔
+- Guia de tests en sidebar ✔
+
+### Calculadora de tamano muestral (Roadmap 3)
+
+- **M1.** Dos grupos independientes (t-test) ✔
+- **M2.** Muestras pareadas ✔
+- **M3.** ANOVA (3+ grupos) ✔
+- **M4.** Correlacion ✔
+- **M5.** Comparar dos proporciones ✔
+- **M6.** Supervivencia (log-rank) ✔
 
 ---
 
-### G8. ~~Personalizacion de figuras por el usuario~~ ✔
-Panel con opciones: titulo, xlabel, ylabel, paleta de colores.
-### F1. ~~Kaplan-Meier (survival)~~ ✔
-Curvas de supervivencia, mediana, comparacion de grupos con log-rank test.
-### F2. ~~Bland-Altman~~ ✔
-Concordancia entre metodos: sesgo, limites de acuerdo, test de sesgo.
-### F3. ~~Curvas ROC~~ ✔
-AUC, corte optimo (Youden's J), sensibilidad/especificidad.
+## Pendiente
+
+### Fase 1: Internacionalizacion (i18n) — siguiente
+
+Toggle espanol/ingles en sidebar. Archivo de traducciones centralizado.
+
+- **I1.** Modulo `ui/i18n.py` con diccionario es/en
+- **I2.** Traducir UI (labels, tooltips, mensajes)
+- **I3.** Traducir interpretaciones (`reports/text.py`)
+- **I4.** Traducir guia de tests (sidebar)
+
+### Fase 2: Figuras y reportes
+
+- **G9.** Q-Q plot
+- **G10.** Heatmap de correlaciones
+- **G11.** Forest plot
+- **R1.** Leyendas de figuras en PDF
+- **R2.** Metadatos en PDF (autor, titulo, institucion)
+
+### Fase 3: UX y polish
+
+- **U6.** Validacion de tamano de archivo
+- **U7.** Eliminar resultados individuales del historial
+- **U8.** Exportar tabla resumen a Excel
+
+### Fase 4: Interpretacion con LLM
+
+Interpretacion contextualizada via API de Claude.
+
+- **L1.** Prompt engineering para interpretacion estadistica
+- **L2.** Integracion con API (con API key del usuario)
+- **L3.** Boton "Interpretar con IA" en resultados
 
 ---
 
-## Completado (reciente)
+## Orden de implementacion
 
-### P1. ~~Interpretacion en lenguaje natural~~ ✔
-Parrafo auto-generado listo para copiar en Resultados de un paper. Cubre todos los tests.
-### P2. ~~Preguntas en vez de jerga~~ ✔
-Selector reformulado como preguntas de investigacion.
-### P3. ~~Etiquetas sin jerga estadistica~~ ✔
-"Que mediste?", "Como se dividen los sujetos?", tooltips en widgets clave.
-### P4. ~~Preseleccion automatica del test~~ ✔
-Test recomendado con explicacion; alternativas en expander "Cambiar test (avanzado)".
-### P5. ~~Figura automatica con el resultado~~ ✔
-Auto-genera la figura mas apropiada junto a los resultados.
-### P6. ~~Tabla descriptiva visible~~ ✔
-Tabla con n, media, DE, mediana por grupo antes del p-valor.
-### P7. ~~Simplificar definicion de variables~~ ✔
-Solo selectbox para ambiguas; claras en resumen; expander para corregir.
-### P8. ~~Advertencias contextuales~~ ✔
-Warnings para n < 10, normalidad con n < 20, grupos desbalanceados.
-
----
-
-### F4. ~~Informe PDF mejorado~~ ✔
-Reportlab en vez de matplotlib text. Portada, tablas descriptivas, tablas de resultados, interpretacion, figuras embebidas.
-### F6. ~~Multiples comparaciones avanzadas~~ ✔
-ANOVA: Tukey HSD, Scheffe, Bonferroni (t-test), Holm (t-test).
-Kruskal: Dunn (Bonferroni/Holm/BH), Conover (Bonferroni).
-Selector en UI con explicacion de cada metodo.
-
----
-
-## Despliegue
-
-- **Streamlit Community Cloud** — opcion mas simple para acceso web publico
-- **LXC Proxmox + systemd** — ya documentado en README, ideal para self-hosted
-- **No es viable como app estatica** — requiere backend Python (scipy, pandas, numpy)
-
----
-
-## Prioridades sugeridas
-
-1. Interpretacion en lenguaje natural + copiar para paper (P1)
-2. Preguntas y etiquetas sin jerga (P2 + P3)
-3. Preseleccion inteligente del test (P4)
-4. Tabla descriptiva visible (P6)
-5. Figura automatica (P5)
-6. Simplificar definicion de variables (P7)
-7. Advertencias contextuales (P8)
-~~8. Informe PDF mejorado (F4)~~ ✔
-~~9. Multiples comparaciones avanzadas (F6)~~ ✔
-
-**Roadmap completo. Todos los items implementados.**
+1. **I1-I4** — Internacionalizacion (siguiente)
+2. **G9-G11, R1-R2** — Figuras y reportes
+3. **U6-U8** — UX y polish
+4. **L1-L3** — LLM (cuando el resto este estable)
