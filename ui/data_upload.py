@@ -5,6 +5,24 @@ import os
 import streamlit as st
 import pandas as pd
 
+MAX_FILE_SIZE_MB = 100
+
+
+def validate_file_size(uploaded_file):
+    """Valida que el archivo no exceda el límite de tamaño.
+
+    Returns:
+        True si el archivo es válido, False si excede el límite.
+    """
+    uploaded_file.seek(0, 2)
+    size_bytes = uploaded_file.tell()
+    uploaded_file.seek(0)
+    size_mb = size_bytes / (1024 * 1024)
+    if size_mb > MAX_FILE_SIZE_MB:
+        st.error(f"El archivo pesa {size_mb:.1f} MB y excede el límite de {MAX_FILE_SIZE_MB} MB.")
+        return False
+    return True
+
 
 def render_data_upload():
     """Renderiza la sección de carga de datos.
@@ -30,6 +48,8 @@ def render_data_upload():
                            f"{st.session_state.df.shape[0]} filas × {st.session_state.df.shape[1]} columnas")
 
     if uploaded_file:
+        if not validate_file_size(uploaded_file):
+            return
         try:
             if uploaded_file.name.endswith('.csv'):
                 sample = uploaded_file.read(4096).decode('utf-8', errors='ignore')

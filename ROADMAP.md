@@ -69,6 +69,9 @@ Despliegue: Streamlit Cloud / HuggingFace / LXC Proxmox.
 - **U4.** Indicador de progreso PDF ✔
 - **U5.** Datos de ejemplo sin subir archivo ✔
 - Guia de tests en sidebar ✔
+- **U6.** Validacion de tamano de archivo ✔
+- **U7.** Eliminar resultados individuales del historial ✔
+- **U8.** Exportar tabla resumen a Excel ✔
 
 ### Calculadora de tamano muestral (Roadmap 3)
 
@@ -100,13 +103,7 @@ Toggle espanol/ingles en sidebar. Archivo de traducciones centralizado.
 - **R1.** Leyendas de figuras en PDF
 - **R2.** Metadatos en PDF (autor, titulo, institucion)
 
-### Fase 3: UX y polish
-
-- **U6.** Validacion de tamano de archivo
-- **U7.** Eliminar resultados individuales del historial
-- **U8.** Exportar tabla resumen a Excel
-
-### Fase 4: Interpretacion con LLM
+### Fase 3: Interpretacion con LLM
 
 Interpretacion contextualizada via API de Claude.
 
@@ -120,5 +117,4 @@ Interpretacion contextualizada via API de Claude.
 
 1. **I1-I4** — Internacionalizacion (siguiente)
 2. **G9-G11, R1-R2** — Figuras y reportes
-3. **U6-U8** — UX y polish
-4. **L1-L3** — LLM (cuando el resto este estable)
+3. **L1-L3** — LLM (cuando el resto este estable)
