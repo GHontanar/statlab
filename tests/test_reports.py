@@ -1,11 +1,10 @@
 """Tests para reports/text.py y reports/pdf.py"""
 
+import plotly.graph_objects as go
 import pytest
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from reports.text import format_result_text, generate_interpretation
+
 from reports.pdf import generate_pdf_report
+from reports.text import format_result_text, generate_interpretation
 
 
 @pytest.fixture
@@ -403,13 +402,11 @@ class TestGeneratePdfReport:
             'statistic': 0.9, 'p_value': 0.001, 'significant': True,
             'r_squared': 0.81, 'n': 30, 'alpha': 0.05, 'success': True,
         }]
-        fig, ax = plt.subplots()
-        ax.plot([1, 2, 3], [1, 2, 3])
+        fig = go.Figure(go.Scatter(x=[1, 2, 3], y=[1, 2, 3]))
         buf = generate_pdf_report(results, [fig])
         data = buf.read()
         assert data[:5] == b'%PDF-'
         assert len(data) > 1000
-        plt.close(fig)
 
     def test_empty_results(self):
         buf = generate_pdf_report([], [])

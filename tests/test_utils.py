@@ -1,8 +1,8 @@
 """Tests para utils/data.py"""
 
-import pandas as pd
 import numpy as np
-import pytest
+import pandas as pd
+
 from utils.data import infer_variable_type, validate_continuous, validate_group_sizes
 
 

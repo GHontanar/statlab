@@ -1,10 +1,10 @@
 """Tests para stats/tests.py"""
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
-from stats.tests import check_normality, check_homogeneity, suggest_test, run_test
 
+from stats.tests import check_homogeneity, check_normality, run_test, suggest_test
 
 # --- Fixtures ----------------------------------------------------------------
 

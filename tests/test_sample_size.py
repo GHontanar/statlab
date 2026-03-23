@@ -1,14 +1,13 @@
 """Tests para stats/sample_size.py — calculadora de tamano muestral."""
 
-import pytest
 
 from stats.sample_size import (
-    sample_size_ttest_ind,
-    sample_size_ttest_paired,
     sample_size_anova,
     sample_size_correlation,
     sample_size_proportions,
     sample_size_survival,
+    sample_size_ttest_ind,
+    sample_size_ttest_paired,
     sensitivity_table,
 )
 

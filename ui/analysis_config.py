@@ -1,15 +1,22 @@
 """Configuración UI por tipo de análisis y dispatcher."""
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
+from stats.tests import POSTHOC_METHODS, check_homogeneity, check_normality, suggest_test
 from ui.constants import (
-    Q_DIFF_GROUPS, Q_CORRELATION, Q_ASSOCIATION, Q_AGREEMENT,
-    Q_PREDICTION, Q_SURVIVAL, Q_RISK, Q_RELIABILITY,
-    ANALYSIS_TYPES, AnalysisConfig,
+    ANALYSIS_TYPES,
+    Q_AGREEMENT,
+    Q_ASSOCIATION,
+    Q_CORRELATION,
+    Q_DIFF_GROUPS,
+    Q_PREDICTION,
+    Q_RELIABILITY,
+    Q_RISK,
+    Q_SURVIVAL,
+    AnalysisConfig,
 )
 from utils.data import validate_continuous, validate_group_sizes
-from stats.tests import check_normality, check_homogeneity, suggest_test, POSTHOC_METHODS
 
 
 def render_analysis_config(df, var_types):

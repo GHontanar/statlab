@@ -1,11 +1,10 @@
 """Generación manual de figuras y descarga PNG/SVG."""
 
-from io import BytesIO
 
 import streamlit as st
 
-from ui.constants import Q_DIFF_GROUPS, AVAILABLE_FIGURES, DEFAULT_FIGURES, AnalysisConfig
 from charts.figures import generate_figure
+from ui.constants import AVAILABLE_FIGURES, DEFAULT_FIGURES, Q_DIFF_GROUPS
 
 
 def close_figures():

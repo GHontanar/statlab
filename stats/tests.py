@@ -2,8 +2,8 @@
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 import scikit_posthocs as sp
+from scipy import stats
 
 
 def check_normality(data, alpha=0.05):
@@ -548,7 +548,7 @@ def _run_logistic(df, var_dep, var_group, alpha=0.05):
 
 def _run_power(result):
     """F8: Calculo de potencia post-hoc basado en el resultado de un test."""
-    from statsmodels.stats.power import TTestIndPower, TTestPower, FTestAnovaPower
+    from statsmodels.stats.power import FTestAnovaPower, TTestIndPower, TTestPower
 
     test_id = result.get('test', '')
     power_info = {}
@@ -644,7 +644,6 @@ def _run_icc(df, var_dep, var_group, alpha=0.05):
 
     # Mean squares
     ms_rows = ss_rows / (n - 1)
-    ms_cols = ss_cols / (k - 1) if k > 1 else 0
     ms_error = ss_error / ((n - 1) * (k - 1)) if (n - 1) * (k - 1) > 0 else 0
 
     # ICC(3,1) — two-way mixed, consistency, single measures

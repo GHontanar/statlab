@@ -1,12 +1,12 @@
 """Ejecución del análisis, métricas, interpretación y auto-figura."""
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
-from ui.constants import Q_DIFF_GROUPS, AUTO_FIGURE_MAP, AnalysisConfig
-from stats.tests import run_test
 from charts.figures import generate_figure
 from reports.text import format_result_text, generate_interpretation
+from stats.tests import run_test
+from ui.constants import AUTO_FIGURE_MAP, Q_DIFF_GROUPS
 
 
 def render_results(config, df, fig_options):

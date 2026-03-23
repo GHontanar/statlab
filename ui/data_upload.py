@@ -2,8 +2,8 @@
 
 import os
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 MAX_FILE_SIZE_MB = 100
 

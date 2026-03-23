@@ -2,21 +2,21 @@
 StatLab - Análisis Estadístico y Generación de Figuras
 """
 
-import streamlit as st
 import warnings
 
-warnings.filterwarnings('ignore', category=FutureWarning)
-warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+import streamlit as st
 
-from ui.sidebar import render_sidebar
-from ui.data_upload import render_data_upload, render_data_preview
-from ui.variable_definition import render_variable_definition
+warnings.filterwarnings('ignore', category=FutureWarning)
+
 from ui.analysis_config import render_analysis_config
-from ui.results_display import render_results
+from ui.data_upload import render_data_preview, render_data_upload
 from ui.figures_section import render_figures_section
-from ui.summary_and_export import render_summary_and_export
 from ui.landing import render_landing
+from ui.results_display import render_results
 from ui.sample_size import render_sample_size
+from ui.sidebar import render_sidebar
+from ui.summary_and_export import render_summary_and_export
+from ui.variable_definition import render_variable_definition
 
 # --- Configuración general ---------------------------------------------------
 st.set_page_config(

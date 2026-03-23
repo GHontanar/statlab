@@ -1,14 +1,12 @@
 """Tests para funcionalidades UI: validación de archivo, historial, exportación Excel."""
 
-import io
 from io import BytesIO
 from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
-from ui.data_upload import validate_file_size, MAX_FILE_SIZE_MB
-from ui.summary_and_export import _build_summary_df, _summary_to_excel, _remove_result
+from ui.data_upload import MAX_FILE_SIZE_MB, validate_file_size
+from ui.summary_and_export import _build_summary_df, _remove_result, _summary_to_excel
 
 
 class TestValidateFileSize:

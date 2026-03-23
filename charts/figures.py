@@ -1,8 +1,8 @@
 """Generación de figuras estadísticas con Plotly."""
 
 import numpy as np
-from scipy import stats
 import plotly.graph_objects as go
+from scipy import stats
 
 PALETTE = ['#3182ce', '#e53e3e', '#38a169', '#d69e2e', '#805ad5', '#dd6b20']
 

@@ -272,7 +272,6 @@ def generate_interpretation(result):
     # --- Regresion lineal ---
     if test_id == 'linear_reg':
         slope = result.get('slope', 0)
-        intercept = result.get('intercept', 0)
         se = result.get('std_error', 0)
         r2 = result.get('r_squared', 0)
         n = result.get('n', 0)

@@ -1,10 +1,11 @@
 """Tests para charts/figures.py (Plotly)"""
 
-import pandas as pd
 import numpy as np
-import pytest
+import pandas as pd
 import plotly.graph_objects as go
-from charts.figures import generate_figure, _p_to_stars, _figsize_for
+import pytest
+
+from charts.figures import _figsize_for, _p_to_stars, generate_figure
 
 
 @pytest.fixture

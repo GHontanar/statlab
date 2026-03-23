@@ -2,11 +2,11 @@
 
 from io import BytesIO
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
-from reports.text import format_result_text
 from reports.pdf import generate_pdf_report
+from reports.text import format_result_text
 from ui.figures_section import close_figures
 
 
@@ -132,7 +132,4 @@ def _remove_result(valid_index, valid_results):
     real_index = st.session_state.results.index(target)
     st.session_state.results.pop(real_index)
     if real_index < len(st.session_state.figures):
-        fig = st.session_state.figures.pop(real_index)
-        if hasattr(fig, 'close'):
-            import matplotlib.pyplot as plt
-            plt.close(fig)
+        st.session_state.figures.pop(real_index)

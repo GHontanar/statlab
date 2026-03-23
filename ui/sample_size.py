@@ -1,15 +1,15 @@
 """UI de la calculadora de tamaño muestral."""
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 from stats.sample_size import (
-    sample_size_ttest_ind,
-    sample_size_ttest_paired,
     sample_size_anova,
     sample_size_correlation,
     sample_size_proportions,
     sample_size_survival,
+    sample_size_ttest_ind,
+    sample_size_ttest_paired,
     sensitivity_table,
 )
 
