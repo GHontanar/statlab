@@ -185,12 +185,12 @@ def _build_stats_table(result):
 
 
 def _fig_to_image(fig, max_width=150 * mm, max_height=180 * mm):
-    """Convierte una figura matplotlib a un Image de reportlab."""
-    buf = BytesIO()
-    fig.savefig(buf, format='png', dpi=200, bbox_inches='tight')
-    buf.seek(0)
-    # Calcular dimensiones manteniendo aspect ratio
-    fig_w, fig_h = fig.get_size_inches()
+    """Convierte una figura Plotly a un Image de reportlab."""
+    img_bytes = fig.to_image(format='png', width=800, height=600, scale=2)
+    buf = BytesIO(img_bytes)
+    # Aspect ratio de la figura Plotly
+    fig_w = fig.layout.width or 800
+    fig_h = fig.layout.height or 600
     aspect = fig_h / fig_w if fig_w > 0 else 1
     width = max_width
     height = width * aspect

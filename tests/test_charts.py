@@ -1,11 +1,9 @@
-"""Tests para charts/figures.py"""
+"""Tests para charts/figures.py (Plotly)"""
 
 import pandas as pd
 import numpy as np
 import pytest
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from charts.figures import generate_figure, _p_to_stars, _figsize_for
 
 
@@ -50,73 +48,58 @@ class TestGenerateFigure:
     def test_group_figure_types(self, group_df, result_significant, fig_type):
         fig = generate_figure(fig_type, group_df, 'valor', 'grupo',
                               ['A', 'B'], result_significant)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_scatter(self, scatter_df, result_significant):
         fig = generate_figure('scatter', scatter_df, 'y', 'x',
                               result=result_significant)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_histogram_no_groups(self, scatter_df):
         fig = generate_figure('histogram', scatter_df, 'y', 'x')
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_no_result_no_error(self, group_df):
         fig = generate_figure('boxplot', group_df, 'valor', 'grupo',
                               ['A', 'B'], result=None)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_invalid_data_shows_error_text(self):
         """Columna inexistente no crashea, muestra error en figura."""
         df = pd.DataFrame({'a': [1, 2], 'b': ['X', 'Y']})
         fig = generate_figure('boxplot', df, 'inexistente', 'b', ['X', 'Y'])
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
 
-# --- DPI y tamano ------------------------------------------------------------
+# --- Tamaño -----------------------------------------------------------------
 
 class TestFigureQuality:
-    def test_dpi_is_150(self, group_df):
-        fig = generate_figure('boxplot', group_df, 'valor', 'grupo', ['A', 'B'])
-        assert fig.dpi == 150
-        plt.close(fig)
-
     def test_scatter_is_square(self, scatter_df):
         fig = generate_figure('scatter', scatter_df, 'y', 'x')
-        w, h = fig.get_size_inches()
-        assert w == h
-        plt.close(fig)
+        assert fig.layout.width == fig.layout.height
 
     def test_many_groups_widens_figure(self, group_df):
         w, _ = _figsize_for('boxplot', n_groups=6)
-        assert w > 8
+        assert w > 800
 
 
 # --- Bracket de significancia ------------------------------------------------
 
 class TestSignificance:
     def test_bracket_for_2_groups(self, group_df, result_significant):
-        """2 grupos con p significativo debe tener bracket (mas de 2 artistas)."""
+        """2 grupos con p significativo debe tener bracket (shapes)."""
         fig = generate_figure('boxplot', group_df, 'valor', 'grupo',
                               ['A', 'B'], result_significant)
-        ax = fig.axes[0]
-        # El bracket agrega lineas y textos al axes
-        assert len(ax.texts) >= 1
-        plt.close(fig)
+        # El bracket agrega shapes y annotations
+        assert len(fig.layout.shapes) >= 2
+        assert len(fig.layout.annotations) >= 1
 
     def test_text_for_3_groups(self, group_df, result_significant):
         """3 grupos debe usar texto flotante, no bracket."""
         fig = generate_figure('boxplot', group_df, 'valor', 'grupo',
                               ['A', 'B', 'C'], result_significant)
-        ax = fig.axes[0]
-        text_content = [t.get_text() for t in ax.texts]
-        assert any('p =' in t for t in text_content)
-        plt.close(fig)
+        annotations = [a.text for a in fig.layout.annotations]
+        assert any('p =' in t for t in annotations)
 
 
 # --- Helpers -----------------------------------------------------------------
@@ -155,14 +138,12 @@ class TestBlandAltmanFigure:
         result = {'bias': 1.0, 'sd_diff': 3.0, 'loa_upper': 6.88,
                   'loa_lower': -4.88, 'p_value': 0.1}
         fig = generate_figure('bland_altman', df, 'm1', 'm2', result=result)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_without_result(self):
         df = pd.DataFrame({'m1': [1, 2, 3], 'm2': [1.1, 2.1, 3.1]})
         fig = generate_figure('bland_altman', df, 'm1', 'm2', result=None)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
 
 class TestROCFigure:
@@ -178,14 +159,12 @@ class TestROCFigure:
         }
         df = pd.DataFrame({'a': [1], 'b': [1]})
         fig = generate_figure('roc', df, 'a', 'b', result=result)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_without_result_no_crash(self):
         df = pd.DataFrame({'a': [1], 'b': [1]})
         fig = generate_figure('roc', df, 'a', 'b', result=None)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
 
 class TestKaplanMeierFigure:
@@ -202,18 +181,14 @@ class TestKaplanMeierFigure:
         }
         df = pd.DataFrame({'a': [1], 'b': [1]})
         fig = generate_figure('kaplan_meier', df, 'a', 'b', result=result)
-        assert isinstance(fig, plt.Figure)
-        ax = fig.axes[0]
-        # Should show log-rank p value
-        text_content = [t.get_text() for t in ax.texts]
-        assert any('p =' in t for t in text_content)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
+        annotations = [a.text for a in fig.layout.annotations]
+        assert any('p =' in t for t in annotations)
 
     def test_without_result_no_crash(self):
         df = pd.DataFrame({'a': [1], 'b': [1]})
         fig = generate_figure('kaplan_meier', df, 'a', 'b', result=None)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        assert isinstance(fig, go.Figure)
 
     def test_single_group_no_pvalue(self):
         result = {
@@ -225,7 +200,20 @@ class TestKaplanMeierFigure:
         }
         df = pd.DataFrame({'a': [1], 'b': [1]})
         fig = generate_figure('kaplan_meier', df, 'a', 'b', result=result)
-        ax = fig.axes[0]
-        text_content = [t.get_text() for t in ax.texts]
-        assert not any('p =' in t for t in text_content)
-        plt.close(fig)
+        annotations = [a.text for a in fig.layout.annotations] if fig.layout.annotations else []
+        assert not any('p =' in t for t in annotations)
+
+
+# --- Export estático ---------------------------------------------------------
+
+class TestExport:
+    def test_png_export(self, group_df):
+        fig = generate_figure('boxplot', group_df, 'valor', 'grupo', ['A', 'B'])
+        png_bytes = fig.to_image(format='png', scale=1)
+        assert len(png_bytes) > 1000
+        assert png_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+
+    def test_svg_export(self, group_df):
+        fig = generate_figure('boxplot', group_df, 'valor', 'grupo', ['A', 'B'])
+        svg_bytes = fig.to_image(format='svg')
+        assert b'<svg' in svg_bytes
