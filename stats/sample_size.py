@@ -5,11 +5,10 @@ import math
 import numpy as np
 from scipy import stats as sp_stats
 from statsmodels.stats.power import (
+    FTestAnovaPower,
+    NormalIndPower,
     TTestIndPower,
     TTestPower,
-    FTestAnovaPower,
-    GofChisquarePower,
-    NormalIndPower,
 )
 
 

@@ -4,15 +4,13 @@ import datetime
 from io import BytesIO
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, cm
-from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
-                                 TableStyle, Image, PageBreak, HRFlowable)
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import HRFlowable, Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from reports.text import format_result_text, generate_interpretation, _effect_label, _eta_label
-
+from reports.text import _effect_label, _eta_label, generate_interpretation
 
 # --- Estilos -----------------------------------------------------------------
 
