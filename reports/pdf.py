@@ -270,9 +270,11 @@ def generate_pdf_report(results, figures):
                 img = _fig_to_image(fig)
                 story.append(img)
                 story.append(Spacer(1, 5 * mm))
-            except Exception:
+            except Exception as e:
+                # No silenciar la causa: mostrarla ayuda a diagnosticar (p. ej.
+                # kaleido sin Chrome disponible en el entorno de despliegue).
                 story.append(Paragraph(
-                    f'Error al incluir figura {i + 1}', styles['body']))
+                    f'Error al incluir figura {i + 1}: {e}', styles['body']))
 
     doc.build(story)
     buf.seek(0)

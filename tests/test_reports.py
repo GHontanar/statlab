@@ -2,8 +2,9 @@
 
 import plotly.graph_objects as go
 import pytest
+from reportlab.platypus import Image
 
-from reports.pdf import generate_pdf_report
+from reports.pdf import _fig_to_image, generate_pdf_report
 from reports.text import format_result_text, generate_interpretation
 
 
@@ -395,6 +396,15 @@ class TestGeneratePdfReport:
         assert data[:5] == b'%PDF-'
         assert len(data) > 500
 
+    def test_fig_to_image_returns_image(self):
+        """La conversion figura->imagen no debe lanzar (regresion del bug de
+        kaleido sin Chrome en el deploy, que se mostraba como
+        'Error al incluir figura')."""
+        fig = go.Figure(go.Box(y=[1, 2, 3, 4, 5], name='A'))
+        fig.update_layout(width=800, height=600)
+        img = _fig_to_image(fig)
+        assert isinstance(img, Image)
+
     def test_with_figures(self):
         results = [{
             'test': 'pearson', 'test_name': 'Pearson',
@@ -403,10 +413,15 @@ class TestGeneratePdfReport:
             'r_squared': 0.81, 'n': 30, 'alpha': 0.05, 'success': True,
         }]
         fig = go.Figure(go.Scatter(x=[1, 2, 3], y=[1, 2, 3]))
-        buf = generate_pdf_report(results, [fig])
-        data = buf.read()
+        fig.update_layout(width=800, height=600)
+        buf_sin = generate_pdf_report(results, [])
+        buf_con = generate_pdf_report(results, [fig])
+        data = buf_con.read()
         assert data[:5] == b'%PDF-'
-        assert len(data) > 1000
+        # La imagen embebida hace el PDF sustancialmente mayor que el mismo
+        # informe sin figura. Si la figura fallara, el except solo añadiria un
+        # parrafo de texto y los tamanos serian casi iguales.
+        assert len(data) > len(buf_sin.read()) + 10_000
 
     def test_empty_results(self):
         buf = generate_pdf_report([], [])
