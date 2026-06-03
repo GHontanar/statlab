@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from stats.tests import check_homogeneity, check_normality, run_test, suggest_test
+from utils.constants import TIPO_CATEGORICA, TIPO_NUMERICA
 
 # --- Fixtures ----------------------------------------------------------------
 
@@ -96,57 +97,57 @@ class TestCheckNormality:
 
 class TestSuggestTest:
     def test_2_groups_normal_independent(self):
-        s = suggest_test('Continua', 'Categorica', 2, paired=False, normal=True)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=False, normal=True)
         ids = [tid for _, tid in s]
         assert 't_independent' in ids
         assert 't_welch' in ids
 
     def test_2_groups_normal_paired(self):
-        s = suggest_test('Continua', 'Categorica', 2, paired=True, normal=True)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=True, normal=True)
         assert s[0][1] == 't_paired'
 
     def test_2_groups_nonnormal_independent(self):
-        s = suggest_test('Continua', 'Categorica', 2, paired=False, normal=False)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=False, normal=False)
         assert s[0][1] == 'mann_whitney'
 
     def test_2_groups_nonnormal_paired(self):
-        s = suggest_test('Continua', 'Categorica', 2, paired=True, normal=False)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=True, normal=False)
         assert s[0][1] == 'wilcoxon'
 
     def test_3_groups_normal(self):
-        s = suggest_test('Continua', 'Categorica', 3, paired=False, normal=True)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 3, paired=False, normal=True)
         assert s[0][1] == 'anova'
 
     def test_3_groups_nonnormal(self):
-        s = suggest_test('Continua', 'Categorica', 3, paired=False, normal=False)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 3, paired=False, normal=False)
         assert s[0][1] == 'kruskal'
 
     def test_3_groups_paired_normal(self):
-        s = suggest_test('Continua', 'Categorica', 3, paired=True, normal=True)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 3, paired=True, normal=True)
         assert s[0][1] == 'rm_anova'
 
     def test_3_groups_paired_nonnormal(self):
-        s = suggest_test('Continua', 'Categorica', 3, paired=True, normal=False)
+        s = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 3, paired=True, normal=False)
         assert s[0][1] == 'friedman'
 
     def test_two_categorical(self):
-        s = suggest_test('Categorica', 'Categorica', 2)
+        s = suggest_test(TIPO_CATEGORICA, TIPO_CATEGORICA, 2)
         ids = [tid for _, tid in s]
         assert 'chi2' in ids
         assert 'fisher' in ids
 
     def test_two_continuous_normal(self):
-        s = suggest_test('Continua', 'Continua', 1, normal=True)
+        s = suggest_test(TIPO_NUMERICA, TIPO_NUMERICA, 1, normal=True)
         ids = [tid for _, tid in s]
         assert 'pearson' in ids
         assert 'linear_reg' in ids
 
     def test_two_continuous_nonnormal(self):
-        s = suggest_test('Continua', 'Continua', 1, normal=False)
+        s = suggest_test(TIPO_NUMERICA, TIPO_NUMERICA, 1, normal=False)
         assert s[0][1] == 'spearman'
 
     def test_no_match_returns_empty(self):
-        s = suggest_test('Categorica', 'Continua', 2)
+        s = suggest_test(TIPO_CATEGORICA, TIPO_NUMERICA, 2)
         assert s == []
 
 
@@ -593,17 +594,17 @@ class TestCheckHomogeneity:
 
 class TestSuggestTestEqualVar:
     def test_normal_equal_var_recommends_ttest(self):
-        suggestions = suggest_test('Continua', 'Categorica', 2, paired=False,
+        suggestions = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=False,
                                    normal=True, equal_var=True)
         assert suggestions[0][1] == 't_independent'
 
     def test_normal_unequal_var_recommends_welch(self):
-        suggestions = suggest_test('Continua', 'Categorica', 2, paired=False,
+        suggestions = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=False,
                                    normal=True, equal_var=False)
         assert suggestions[0][1] == 't_welch'
 
     def test_paired_ignores_equal_var(self):
-        suggestions = suggest_test('Continua', 'Categorica', 2, paired=True,
+        suggestions = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, 2, paired=True,
                                    normal=True, equal_var=False)
         assert suggestions[0][1] == 't_paired'
 

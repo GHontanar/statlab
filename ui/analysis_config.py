@@ -16,6 +16,7 @@ from ui.constants import (
     Q_SURVIVAL,
     AnalysisConfig,
 )
+from utils.constants import TIPO_CATEGORICA, TIPO_NUMERICA
 from utils.data import validate_continuous, validate_group_sizes
 
 
@@ -24,15 +25,15 @@ def render_analysis_config(df, var_types):
 
     Args:
         df: DataFrame con los datos.
-        var_types: dict {columna: 'Continua'|'Categórica'}.
+        var_types: dict {columna: 'Numérica'|'Categórica'}.
 
     Returns:
         AnalysisConfig con todos los parámetros necesarios para ejecutar el test.
     """
     st.header("3. Análisis estadístico")
 
-    continuous_vars = [c for c, t in var_types.items() if t == 'Continua']
-    categorical_vars = [c for c, t in var_types.items() if t == 'Categórica']
+    continuous_vars = [c for c, t in var_types.items() if t == TIPO_NUMERICA]
+    categorical_vars = [c for c, t in var_types.items() if t == TIPO_CATEGORICA]
     cols = df.columns.tolist()
 
     analysis_type = st.radio(
@@ -189,7 +190,7 @@ def _config_diff_groups(df, cols, continuous_vars, categorical_vars):
             if paired_id_col == "(orden por posición)":
                 paired_id_col = None
 
-    suggestions = suggest_test('Continua', 'Categorica', n_groups, paired, all_normal, equal_var)
+    suggestions = suggest_test(TIPO_NUMERICA, TIPO_CATEGORICA, n_groups, paired, all_normal, equal_var)
 
     selected_test_id = None
     _posthoc_method = None

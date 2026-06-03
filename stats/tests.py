@@ -5,6 +5,8 @@ import pandas as pd
 import scikit_posthocs as sp
 from scipy import stats
 
+from utils.constants import TIPO_CATEGORICA, TIPO_NUMERICA
+
 
 def check_normality(data, alpha=0.05):
     """Test de Shapiro-Wilk para normalidad."""
@@ -33,7 +35,7 @@ def suggest_test(var_dep_type, var_group_type, n_groups, paired=False, normal=Tr
                  equal_var=True):
     """Sugiere el test estadistico mas adecuado."""
     suggestions = []
-    if var_dep_type == 'Continua' and var_group_type == 'Categorica':
+    if var_dep_type == TIPO_NUMERICA and var_group_type == TIPO_CATEGORICA:
         if n_groups == 2:
             if normal:
                 if paired:
@@ -60,10 +62,10 @@ def suggest_test(var_dep_type, var_group_type, n_groups, paired=False, normal=Tr
                     suggestions.append(("Friedman", "friedman"))
                 else:
                     suggestions.append(("Kruskal-Wallis", "kruskal"))
-    elif var_dep_type == 'Categorica' and var_group_type == 'Categorica':
+    elif var_dep_type == TIPO_CATEGORICA and var_group_type == TIPO_CATEGORICA:
         suggestions.append(("Chi-cuadrado", "chi2"))
         suggestions.append(("Test exacto de Fisher", "fisher"))
-    elif var_dep_type == 'Continua' and var_group_type == 'Continua':
+    elif var_dep_type == TIPO_NUMERICA and var_group_type == TIPO_NUMERICA:
         if normal:
             suggestions.append(("Correlacion de Pearson", "pearson"))
         else:
