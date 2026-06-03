@@ -7,5 +7,10 @@ openpyxl>=3.1.0
 lifelines>=0.27.0
 reportlab>=4.0.0
 statsmodels>=0.14.0
-plotly>=5.18.0
-kaleido>=0.2.0
+# kaleido 0.2.1 incluye su propio Chromium embebido, asi que la exportacion de
+# figuras a imagen (PDF/PNG/SVG) funciona en Streamlit Cloud sin Chrome del
+# sistema. kaleido 1.x lo eliminó y requiere instalar Chrome aparte (fallaba en
+# el deploy con "Error al incluir figura"). El techo en plotly evita que una
+# version futura retire el soporte del motor kaleido v0 (plotly 6.6 aun lo trae).
+plotly>=5.18.0,<7.0
+kaleido==0.2.1
