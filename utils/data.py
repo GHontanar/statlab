@@ -2,16 +2,69 @@
 
 import pandas as pd
 
+from utils.constants import (
+    TIPO_CATEGORICA,
+    TIPO_NUMERICA,
+    UMBRAL_CARDINALIDAD_CATEGORICA,
+)
+
+
+def _is_low_cardinality_integer(series):
+    """True si la serie numerica toma pocos valores unicos y todos son enteros.
+
+    El umbral de cardinalidad solo tiene sentido para valores entero-equivalentes
+    (codigos 1/2/3, 0.0/1.0, enteros-con-NaN que pandas lee como float). Un float
+    con parte decimal es una medicion continua y NO debe caer por cardinalidad,
+    por pequena que sea la muestra. Asume que la serie ya es de dtype numerico.
+    """
+    clean = series.dropna()
+    if len(clean) == 0:
+        return True  # todo-NaN: sin senal, se trata como categorica
+    if not (clean % 1 == 0).all():
+        return False  # tiene decimales -> continua
+    return series.nunique() <= UMBRAL_CARDINALIDAD_CATEGORICA
+
 
 def infer_variable_type(series):
-    """Infiere si una variable es categorica o continua."""
+    """Infiere si una variable es numerica o categorica.
+
+    Unica fuente de verdad de la inferencia de tipos. Reglas (en orden):
+      1. object / category / bool -> categorica.
+      2. datetime -> categorica (nunca debe ofrecerse como numerica para un
+         t-test; validate_continuous la rechazaria de todos modos).
+      3. numerica (cualquier dtype: int8/16/32/64, uint*, Int64 nullable,
+         float32/64, y enteros con NaN que pandas lee como float): entero de
+         baja cardinalidad -> categorica; si no -> numerica. Los floats con
+         decimales son siempre numericos (ver _is_low_cardinality_integer).
+      4. cualquier otro dtype -> categorica (no es analizable como numerica).
+    """
     if series.dtype == 'object' or series.dtype.name == 'category':
-        return 'Categorica'
+        return TIPO_CATEGORICA
     if series.dtype == 'bool':
-        return 'Categorica'
-    if series.nunique() <= 10 and series.dtype in ['int64', 'int32']:
-        return 'Categorica'
-    return 'Continua'
+        return TIPO_CATEGORICA
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return TIPO_CATEGORICA
+    if pd.api.types.is_numeric_dtype(series):
+        if _is_low_cardinality_integer(series):
+            return TIPO_CATEGORICA
+        return TIPO_NUMERICA
+    return TIPO_CATEGORICA
+
+
+def is_ambiguous_numeric(series):
+    """True si la clasificacion numerica/categorica de la serie es dudosa.
+
+    Es la zona donde infer_variable_type "adivina" categorica por cardinalidad:
+    una serie numerica entera con pocos valores unicos (codigos 1/2/3, o un
+    float 0.0/1.0). Conviene que el usuario la revise. Reutiliza el mismo umbral
+    que infer_variable_type para no duplicar la heuristica. Bool se excluye
+    (pandas lo considera numerico, pero es claramente categorico).
+    """
+    if series.dtype == 'bool':
+        return False
+    if not pd.api.types.is_numeric_dtype(series):
+        return False
+    return _is_low_cardinality_integer(series)
 
 
 def validate_continuous(df, col_name):
@@ -20,9 +73,9 @@ def validate_continuous(df, col_name):
     if col_name not in df.columns:
         return False, f"La columna '{col_name}' no existe en los datos."
     if not pd.api.types.is_numeric_dtype(df[col_name]):
-        return False, (f"La columna '{col_name}' no es numerica. "
+        return False, (f"La columna '{col_name}' no es numérica. "
                        f"Tipo detectado: {df[col_name].dtype}. "
-                       f"Cambiala a 'Categorica' o revisa los datos.")
+                       f"Cámbiala a '{TIPO_CATEGORICA}' o revisa los datos.")
     n_valid = df[col_name].notna().sum()
     if n_valid == 0:
         return False, f"La columna '{col_name}' no tiene valores validos (todos NaN)."
