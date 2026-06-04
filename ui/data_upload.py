@@ -7,6 +7,11 @@ import streamlit as st
 
 MAX_FILE_SIZE_MB = 100
 
+# Raíz del proyecto (carpeta padre de ui/). Anclar aquí las rutas de los datasets
+# de ejemplo evita que dependan del directorio de ejecución (cwd), que cambia según
+# cómo se lance la app (local, Dev Container, Streamlit Cloud).
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def validate_file_size(uploaded_file):
     """Valida que el archivo no exceda el límite de tamaño.
@@ -44,8 +49,9 @@ def render_data_upload():
             "Ensayo clínico (grupos, correlación, ROC, supervivencia…)": "datos_demo.csv",
             "Concordancia entre observadores (pareados, ICC)": "datos_demo_observadores.csv",
         }
-        _sample_files = {label: path for label, path in _sample_labels.items()
-                         if os.path.exists(path)}
+        _sample_files = {label: os.path.join(_PROJECT_ROOT, fname)
+                         for label, fname in _sample_labels.items()
+                         if os.path.exists(os.path.join(_PROJECT_ROOT, fname))}
         if _sample_files:
             _chosen = st.selectbox("Datos de ejemplo", [""] + list(_sample_files.keys()),
                                    label_visibility="collapsed")
