@@ -37,14 +37,22 @@ def render_data_upload():
                                          help="Formatos aceptados: CSV, XLSX, XLS")
     with sample_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        _sample_files = {f: f for f in ['sample_data.csv', 'test_completo.csv']
-                         if os.path.exists(f)}
+        # Etiqueta descriptiva -> archivo. Dos datasets de demostración:
+        #  - wide (una fila por paciente): cubre la mayoría de tests.
+        #  - long (medidas repetidas): cubre pareados e ICC, que la app pide apilados.
+        _sample_labels = {
+            "Ensayo clínico (grupos, correlación, ROC, supervivencia…)": "datos_demo.csv",
+            "Concordancia entre observadores (pareados, ICC)": "datos_demo_observadores.csv",
+        }
+        _sample_files = {label: path for label, path in _sample_labels.items()
+                         if os.path.exists(path)}
         if _sample_files:
             _chosen = st.selectbox("Datos de ejemplo", [""] + list(_sample_files.keys()),
                                    label_visibility="collapsed")
             if _chosen and st.button("Cargar ejemplo", use_container_width=True):
-                st.session_state.df = pd.read_csv(_chosen)
-                st.success(f"Cargado: {_chosen} — "
+                _path = _sample_files[_chosen]
+                st.session_state.df = pd.read_csv(_path)
+                st.success(f"Cargado: {_path} — "
                            f"{st.session_state.df.shape[0]} filas × {st.session_state.df.shape[1]} columnas")
 
     if uploaded_file:
